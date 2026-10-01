@@ -1,0 +1,91 @@
+
+The ax and the surveyor's chain, along with the rifle and the hunting-knife, constituted the armorial bearings of the pioneer. With individual as with corporation, with explorer as with landlord, land-hunger was the master impulse of the era.
+- Archibald Henderson, the Conquest of the Old Southwest
+
+The Necromancer is dead. Federal forces armed with dynamite and Gatling guns held the line against the undead horde while a handful of gunslingers faced the Necromancer herself. When she fell, the single-minded purpose of her armies melted away like wax. Three years on, the Bloodrose Wastes are desolate and ripe for conquest. The President has issued Charters of Settlement in the Bloodrose Wastes following the defeat of the Necromancer. Now prospectors have been riding in by coach to dig up Magesilver, the shimmering metal that grows where wizards walk. While toxic to humans, Magesilver is worth a fortune to the magisters of the Capitol. Now nearly a thousand settlers have set themselves up in the Wastes, in boom towns like Hommlet and Shiftless, hoping to strike it big. Others have set up in the newly-free grazing land as ranchers, making their fortune in a more dependable way. Even a pair of rival railroad companies from back East have set their sights on the Wastes - both hoping to be the first to finish a rail line to the silver mines.
+
+But even three years on there isn't enough Magesilver to go around. A prominent mine has dried up entirely, and recent claims are fewer and farther between. Some have taken to searching for the entrance to the Necromancer's Lair, where her great secrets are said to remain for the brave. Other desperados are saddling up and forming their own gangs, ready to get rich or die trying.
+
+HIGH NOON IN HOMMLET is a Cowboy Fantasy GSRP. You will play as a gunslinger out to make your fortune in the Bloodrose Wastes, making shifting alliances and secret plots against others on your way. I will use BOOT HILL for combat resolution during Showdowns should a shootout happen but intend to keep the exact mechanics a bit breezy. Characters will have their statistics randomly generated once they are accepted. As ever, proper planning can make up for deficits in marksmanship.
+
+MECHANICS
+Turns represent 1 week of time. Orders will be sent in a thread to myself and @Month of Rains with the title HIGH NOON IN HOMMLET ~ [YOUR CHARACTER]. Order limit is 150 words by default.
+
+You need MONEY to pay for food, lodging in towns, and various supplies such as ammunition. If you are without food or lodging for 1 turn, your order limit is cut in half to represent more of your time being spent on subsistence. If you are without food or lodging for 2 turns, you perish of exposure. Certain affiliations are able to work around this limit.
+
+Character statistics are randomly generated upon approval. I will provide you with a rough estimate of your abilities, as well as starting funds and a list of things that you can purchase or pay for.
+
+Combat mechanics are somewhat obfuscated during Showdowns - things like cover, surprise, and movement all have an impact. If you want a more detailed look at what is 'behind the curtain,' feel free to review the mechanics of
+BOOT HILL 2nd Edition, but it should not be necessary. Gunfights are fast, brutal, and deadly, and combat should be a last resort unless you want a bounty on your head - or to end up in a shallow grave.
+
+Each character has an affiliation which impacts their goals. Some have definite win conditions, while others are more broad. All seek to improve their station.
+
+WHITE HATS
+Sheriff (2 total)
+This badge means order - it means civilization. Men with guns who keep the peace. Homlett and Shiftless both start with their own elected sheriff. Both have the goal of capturing every outlaw, but they're a competitive bunch. Whoever has the highest amount of reward money from outlaws wins. Sheriffs can deputize other characters, guaranteeing them a wage, giving them the right to be armed in town, and changing their public goal to capturing every outlaw. But take care to ensure you don't deputize a BLACK HAT, or you will quickly find yourself outfoxed by wicked and iniquitous men.
+Witchhunters (2 max)
+Agents of the Treasury Department's Inquisition, paladins from the Capitol sent to the Bloodrose Wastes to investigate rumors of witchcraft. Their goal is to capture every witch, and haul them back to the Capitol alive for nerve branding and conscription. Witchhunters can perform a ritual upon a captured individual to determine if they have the taint of witchcraft upon them. Witchhunter apps should detail the three tenets of their Paladin oath. All start in Ft. Karsen.
+Federal Marshal (1 max)
+Pro Lege et Pace, for Law and Peace, is the motto of the Marshals, the most terrible organization in the known world. Charged to serve as the hand of reckoning for the young Republic and the long arm of the law, they travel the west alone, followed by swirling buzzards and heralded by bitter water. Their jurisdiction extends to difficult problems: wire fraud, interstate crime, treason and espionage. Armed with a .45 Federal revolver and a flask of souls, a Marshal's arrival portends doom. It is said that they always get their man.
+NEUTRAL
+Townies
+Businessmen and professionals within one of the settlements - urbane, civilized Hommlet, or wild rancher town Shiftless. Doctors, publicans, blacksmiths, journalists, lawyers, general store owners, and more - those with a trade of their own to ply. They are respectable, at least for a given definition, and receive a bonus in elections. Their goal is to ensure that their town becomes capital of the new Territory of Bloodrose - if Lockheart's Rest becomes capital, both lose!
+Drifter
+Here are the wandering loners of the badlands. Ranch hands, bounty hunters, prospectors, professional gamblers, mail couriers and guns for hire. No special bonuses, but without particular flaw. Their goal is to become a legend, whatever that means to them.
+Tycoon (2 max)
+The promise of the West is that you can be your own man and make your own fortune. To that end, a number of business magnates have established their own concerns within Bloodrose, from lucrative silver mines, to ranchers, to farmers. Whatever their commodity, they ultimately live and die by land use and mineral rights. Their goal is for their company to own 51% of productive land within the county.
+Railroad Agent (2 total)
+Two Eastern railway concerns - Lionhill Transport and Honeyspring Rail - have each sent an agent with $500 to ensure that their company, no matter what, is first to complete a railway from Lockheart's Rest, to the capital of Bloodrose Territory, to the largest silver mine in Bloodrose. To that end, they are advised to use any and all methods at their disposal to succeed - so long as the matter stays out of the papers.
+Shadowdancers (2 max)
+Much has been made out east of the murderous beastmen hordes of the Necromancer -- the cackling gnolls, vicious bugbears, conniving snake-men, and cunning kobolds whose nocturnal raids occupy the collective nightmares of a generation. Now the Necromancer is gone and the tribes are still here, a shattered confederation of the thousand clans who call the Bloodrose Wastes home. Emerging from their ruin is the Shadowdancer movement, a growing religious sect foretelling a coming millennium of darkness, which will see a new power rise in the west and the invaders expelled forever from the badlands. 2 Shadowdancers scour the wastes for the Necromancer's Lair so that they can see this vision fulfilled.
+BLACK HATS
+These affiliations are hidden and all bidded for privately. Message them to me and @Month of Rains on sufficient velocity, do not include in your app.
+Outlaw (? max)
+The promise of the West is that you can be your own man and make your own fortune. To that end, some men take matters into their own hands, because for some men the only trade to ply is force. Outlaws are robbers, cattle rustlers, bush rangers, lowlife desperados and criminals. They are unknown to law enforcement until they are wanted for a crime. Able to hire NPCs or join with like-minded player characters in their own gangs. The Outlaw's goal is to be the first to attain $100,000 and escape the Wastes alive and free.
+Witch (? max)
+Witches are hedge mages and folk magic practitioners, the vultures descending after any magus of great might perishes. They each have a Familiar, a small animal that they can control and see through the eyes of, as well as the ability to create poison from local plants. None know the identities of any other witches, but they might found a coven if they do learn of them. However, their goal is to find the Necromancer's Lair and become her sole inheritor, wielding the Tools of Abandon to reshape the world as they alone see fit.
+Other BLACK HAT affiliations may be found in play, for those who overflow with hungry ravenous greed and for those who contain in themselves the sum violence of human history.
+
+Each character has STATISTICS that affect Showdowns: Speed, Gun Accuracy, Throwing Accuracy, Strength, Bravery, Experience (number of gunfights survived.) These are determined by d100 roll. After acceptance, I will roll these stats for you and you can assign them how you like. Experience, Speed, and Bravery can be improved by surviving gunfights where the possibility of death is present.
+
+The application is as follows:
+
+NAME:
+RACE: (The Capital is cosmopolitan, full of peoples from all walks of life. Out West, most settlers are human - the poorest and most numerous people.)
+AFFILIATION: (Public affiliation only - private affiliations should be PMed in a thread with me and my co-GM.)
+STARTING LOCATION: (Hommlett, Shiftless, or another location within Bloodrose.)
+BIOGRAPHY:
+PERSONALITY:
+
+Roughly 8 turns, roughly 20 players. Apps will be open for 2 weeks. First GSRP I've ever run so let me know if I've missed something.
+
+---
+
+Gazetteer
+Settlements
+Hommlett
+Old, grand, sweet Hommlet, named Tierra Rica in the age of the Necromancer, is the crowning jewel of the Bloodrose Waste. Situated at the foot of Cerro Plata, a grim and towering peak with more silver in its veins than in the rest of the world put together, Hommlet is the place to go for anyone seeking to make a new life in the west. Here miners gamble away their magesilver at the Forty-Niner, bankers count their profits, and caravanners bring wagons of timber, water, and liquor through the vast shimmering wastes, muttering darkly about the proposed railroad poised to sweep the continent from sea to shining sea.
+Shiftless
+In the scrubland where aurochs graze and the treacherous Red River winds, Shiftless sits crooked and mean. Populated by ranch-hands, cowpokes, and ex-cons sent west under the Transportation Act to help build the frontier. Here there are cattle markets, whorehouses, rodeos, con men, blacksmiths, and, of course, the Stony Saddle, where a drifter can enjoy a glass of forty-rod whiskey and a bullet in the back, all before ten in the morning. They say there's three sisters here who can see the future, they say there's a dwarf who's met the devil.
+New Azalea
+A trapping town populated by elves from up north, driven into Bloodrose for the practice of their strange religion. They are said to eat the flesh of the sentient races and are some of the fiercest duelists in the west, but deal fairly with those who come to make deals or seek their hospitality. Their cider waters mouths from Shiftless to the Capitol.
+Ft. Karsen
+Situated at the site of the Battle of Bloody Junction, a day's ride from Shiftless and Hommlet, Fort Karsen is the hand of civilization extended to the west -- rough, tremulous, and badly overextended. With an official hospital overflowing with the diseased and dead afflicted by Mage Madness, piles of unclaimed bounties for the ever-growing ranks of desperados terrorizing the sands, and a mimic infestation leaving riflemen counting their bullets, the Fort is a tense place to be. Adobe longhouses and barracks sit behind thick earthen walls, beneath the shadow of the rickety Watchtower of the Witchhunters, where dark eyes scan the wastes for the telltale glow of magic.
+Creosote
+A ghost town, once populated by loyal followers of the Necromancer, the home of her vicious cavaliers. The town was sacked and burned in the dying days of the war, its people left for the crows and buzzards and coyotes. A haunted, ugly place that most avoid.
+Mines/Ranches
+Flint Knife Mine
+The first silver mine prospected after the Charters of Settlement. It was abandoned, and men name all the reasons that they might for it - a cave-in, hungry ghosts, Mage Madness, raids from the Beastmen. But truth is, no one knows for sure, and if any Flint Knife miners are left they aren't telling.
+Motherlode Mine
+The largest mine in the Bloodrose Mountains, digging deep into the Cerro Plata, where men toil and die under the auspices of the Motherlode Mining Company. Ramshackle supports lit by lamplight descend indeterminably into the deep darkness.
+Lazy J Ranch
+A prominent cattle ranch out by the bluffs west of Shiftless, called the 'Pearl of Bloodrose' for their prized longhorns and red aurochs, the envy of many an Eastern rancher. Some whisper enviously that Jay Lazlo must have skinned a devil's hide for all his aurochs to have that fine red coat of theirs…
+Temple Ridge Ranch
+A sheep ranch of some unpleasant reputation close to the northern badlands. The ranch is owned by a mean cuss of a gnome who likes to play bad-spirited tricks and hurl fistfuls of money at people's feet.
+Other Areas
+Keya'onghu
+'Black Cliffs' in the tongue of the Shadowdancers and their Gloomsingers. The hidden valley where the gnolls and goblins dance with the dead and sing of the coming night. Once the sacred gathering place of the thousand tribes of the desert, hidden from the excoriating sunlight by deep walls of black basalt, built into the stone, worming through the earth, windows and passages shining like a patchwork of stars. Spared from the wholesale massacre of the war, it is the great redoubt of the beastmen, where their bones are interred and their young are raised and their bone-blades sharpened.
+Remembrance Pass
+The primary entrance in and out of Bloodrose, surrounded as it is by the Bloodrose Mountains. There is a trading post where the pass opens up to the valley, choked with the dust of stage coaches. It offers water for horses and whiskey for men.
+Red River
+The major river of the Bloodrose Wastes, once called the Rio Alamo for the cottonwoods growing along its shoreway's riparian zone. It snakes, winding and treacherous, from east to west. The spirits of the river are vengeful, and do not allow passage save for those pontoon bridges set up by the Federal Army Corps of Engineers.

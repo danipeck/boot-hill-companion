@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ArrowDownToLine, ArrowRight, BookOpen, Check, ChevronDown, CircleHelp, Crosshair, Dice5, History, Plus, RotateCcw, Settings2, Shield, Sparkles, Star, Target, Trash2, UserRound, X, Zap } from 'lucide-react';
+import { ArrowDownToLine, ArrowRight, BookOpen, Check, ChevronDown, CircleHelp, Crosshair, Dice5, History, Moon, Plus, RotateCcw, Settings2, Shield, Sparkles, Star, Sun, Target, Trash2, UserRound, X, Zap } from 'lucide-react';
 import { abilityModifiers, calculate, conditions, initialSheet, parseSheet, probability, ranges, resolveHit, rollPercentile, shooterMovement, signed, targetMovement, weaponProfiles, weapons, type AbilityForm, type SheetForm, type StatKey } from './rules';
 
 type InputMode = 'scores' | 'modifiers';
@@ -59,6 +59,7 @@ const modifierFields: { key: StatKey; label: string; hint: string; icon: typeof 
 ];
 
 export default function App() {
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
   const [character, setCharacter] = useState<Character>(loadCharacter);
   const [weaponId, setWeaponId] = useState('double-action');
   const [customSpeed, setCustomSpeed] = useState('5');
@@ -81,6 +82,17 @@ export default function App() {
   const [saveStatus, setSaveStatus] = useState('Saved on this device');
   const [toast, setToast] = useState('');
   const nameRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#191c18' : '#f6f2e9');
+  }, [theme]);
+
+  function toggleTheme() {
+    const next = theme === 'light' ? 'dark' : 'light';
+    setTheme(next);
+    try { localStorage.setItem('boot-hill.theme.v1', next); } catch {}
+  }
 
   useEffect(() => {
     try { localStorage.setItem(storageKey, JSON.stringify(character)); setSaveStatus('Saved on this device'); }
@@ -142,12 +154,18 @@ export default function App() {
     <header className="site-header"><div className="header-inner">
       <a className="brand" href="#" aria-label="Boot Hill home"><BadgeStar/><span>BOOT HILL<small>THE GUNSLINGER’S COMPANION</small></span></a>
       <nav aria-label="Main navigation"><a className="nav-active" href="#tabletop"><Dice5 size={16}/>Tabletop</a><button onClick={() => { nameRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); nameRef.current?.focus({ preventScroll: true }); }}><UserRound size={16}/>Character</button><button onClick={() => setDialog('rules')}><BookOpen size={16}/>Rules reference</button></nav>
-      <span className="edition">SECOND EDITION <span>1979</span></span>
+      <div className="header-actions">
+        <span className="edition">SECOND EDITION <span>1979</span></span>
+        <button className="theme-toggle" type="button" onClick={toggleTheme} aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`} title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}>
+          {theme === 'light' ? <Moon size={16}/> : <Sun size={16}/>}
+          <span>{theme === 'light' ? 'Dark mode' : 'Light mode'}</span>
+        </button>
+      </div>
     </div></header>
 
     <main className="page" id="tabletop">
       <section className="intro">
-        <h1>A steady hand. A little luck.</h1>
+        <h1>Silver runs thin. Blood runs easy.</h1>
         <Desert/>
       </section>
       <div className="workspace">
@@ -197,7 +215,7 @@ export default function App() {
           <section className="history-card card"><div className="section-heading"><div className="title-with-icon"><History size={17}/><h2>The trail so far</h2><span className="count-badge">{rolls.length}</span></div><button className="text-button" disabled={!rolls.length} onClick={() => setRolls([])}><Trash2 size={13}/>Clear</button></div>{rolls.length ? <div className="history-list">{rolls.slice(0, 5).map(item => <div className="history-row" key={item.id}><span className={`history-die ${item.hit ? 'hit' : 'miss'}`}>{String(item.roll).padStart(2, '0')}</span><div className="history-description"><strong>{item.weapon}</strong><small>{item.character} · {item.range} range · ≤ {item.chance} · first shot {signed(item.firstShot)}</small></div><span className={`result-tag ${item.hit ? 'hit' : 'miss'}`}>{item.hit ? 'HIT' : 'MISS'}</span><time>{item.time}</time></div>)}</div> : <div className="history-empty"><span className="trail-line"/><p>A clean slate. Let’s see what the dice have in store.</p><span className="trail-line"/></div>} {rolls.length > 5 && <p className="history-limit">Showing the last 5 of {rolls.length} rolls this session.</p>}</section>
         </div>
       </div>
-      <footer><span><BadgeStar/> An unofficial companion for Boot Hill, 2nd Edition.</span><button onClick={() => setDialog('rules')}>Keep the rulebook close <BookOpen size={13}/></button></footer>
+      <footer><span><BadgeStar/> An unofficial companion for Boot Hill, 2nd Edition.</span></footer>
     </main>
     {toast && <div className="toast" role="status"><Check size={17}/>{toast}</div>}
     {dialog === 'rules' && <Dialog title="A little rules refresher" onClose={() => setDialog(null)}><div className="rules-content"><span className="eyebrow">BOOT HILL · SECOND EDITION</span><h3>Fast hands. Straight shooting.</h3><p><b>First shot</b> = speed ability modifier + bravery speed modifier + weapon speed modifier + situational speed modifiers. Higher scores shoot first; ties fire simultaneously. This score is not rolled.</p><p><b>Hit determination</b> = 50 + gun or throwing accuracy modifier + bravery accuracy modifier + experience modifier + range and situational modifiers. Roll d100: a result at or below that threshold hits.</p><p><b>Sheet scores</b> are the final percentile scores on your character sheet, including any creation or survival adjustments. Experience uses your previous number of gunfights. You can also enter your sheet’s modifiers directly. Each input mode keeps its own values; switching to Modifiers converts your current scores.</p><p><b>Range</b> uses the selected weapon’s chart in map spaces or tabletop inches. Each map space / tabletop inch represents six feet. Choose the applicable band; targets beyond the listed extreme range are out of range.</p><p><b>Situational modifiers</b> are cumulative. Check the weapon-at-rest restriction, referee decisions about protective cover, and which bonuses apply to your attack. Shotgun and scatter-gun accuracy bonuses are included automatically. Wound location, severity, and multiple pellet effects still use the rulebook.</p><p className="reference-note">Checked against the local 2e rulebook: ability tables p. 5, base numbers pp. 6–7, weapons p. 8, combat modifiers p. 9. No automatic misses, critical hits, or extra house rules are added.</p><button className="roll-button" onClick={() => setDialog(null)}>Back to the tabletop<ArrowRight size={16}/></button></div></Dialog>}
