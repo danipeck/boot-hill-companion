@@ -1,26 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ArrowDownToLine, ArrowRight, BookOpen, Check, ChevronDown, CircleHelp, Crosshair, Dice5, History, Moon, Plus, RotateCcw, Settings2, Shield, Sparkles, Star, Sun, Target, Trash2, UserRound, X, Zap } from 'lucide-react';
+import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
+import { ArrowDownToLine, ArrowRight, BookOpen, Check, ChevronDown, CircleHelp, Crosshair, Dice5, FolderOpen, History, Moon, Plus, RotateCcw, Save, Settings2, Shield, Sparkles, Star, Sun, Target, Trash2, Upload, UserRound, X, Zap } from 'lucide-react';
 import { abilityModifiers, calculate, conditions, initialSheet, parseSheet, probability, ranges, resolveHit, rollPercentile, shooterMovement, signed, targetMovement, weaponProfiles, weapons, type AbilityForm, type SheetForm, type StatKey } from './rules';
+import { exportCharacterJson, importCharacter, loadSaved, readCharacterFile, readLibrary, removeSaved, sample, saveDraft, writeLibrary, type Character, type CharacterLibrary } from './characters';
 
 type InputMode = 'scores' | 'modifiers';
-type Character = { name: string; mode: InputMode; abilities: AbilityForm; modifiers: SheetForm };
 type Roll = { id: string; roll: number; chance: number; hit: boolean; weapon: string; character: string; range: string; firstShot: number; time: string };
-const sample: Character = {
-  name: 'The Colorado Kid', mode: 'scores',
-  abilities: { speed: '90', gunAccuracy: '64', throwingAccuracy: '62', bravery: '55', gunfights: '0' },
-  modifiers: { ...initialSheet, speed: '12', braverySpeed: '1', gunAccuracy: '5', throwingAccuracy: '5', braveryAccuracy: '3' },
-};
-const storageKey = 'boot-hill.character.v1';
-
-function loadCharacter(): Character {
-  try {
-    const value = JSON.parse(localStorage.getItem(storageKey) || 'null');
-    if (!value || typeof value.name !== 'string' || !['scores', 'modifiers'].includes(value.mode)) return sample;
-    if (!Object.keys(sample.abilities).every(key => typeof value.abilities?.[key] === 'string')) return sample;
-    if (!Object.keys(initialSheet).every(key => typeof value.modifiers?.[key] === 'string')) return sample;
-    return { name: value.name.slice(0, 80), mode: value.mode, abilities: value.abilities, modifiers: value.modifiers };
-  } catch { return sample; }
-}
 
 function BadgeStar({ className = '' }: { className?: string }) {
   return <svg className={className} viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="m32 6 7 16 17-2-11 14 7 16-20-5-20 5 7-16L8 20l17 2Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /><circle cx="32" cy="31" r="8" stroke="currentColor" strokeWidth="1.5" /><circle cx="32" cy="6" r="2" fill="currentColor" /><circle cx="8" cy="20" r="2" fill="currentColor" /><circle cx="56" cy="20" r="2" fill="currentColor" /><circle cx="12" cy="50" r="2" fill="currentColor" /><circle cx="52" cy="50" r="2" fill="currentColor" /></svg>;
@@ -60,9 +44,15 @@ const modifierFields: { key: StatKey; label: string; hint: string; icon: typeof 
 
 export default function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
-  const [character, setCharacter] = useState<Character>(loadCharacter);
-  const [weaponId, setWeaponId] = useState('double-action');
-  const [customSpeed, setCustomSpeed] = useState('5');
+  const [library, setLibrary] = useState<CharacterLibrary>(() => {
+    try { return readLibrary(localStorage); }
+    catch { return readLibrary({ getItem: () => null }); }
+  });
+  const character = library.draft;
+  const { weaponId, customSpeed } = character.loadout;
+  const [selectedCharacterId, setSelectedCharacterId] = useState(library.activeId || '');
+  const [libraryError, setLibraryError] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
   const [rangeIndex, setRangeIndex] = useState(0);
   const [selectedConditions, setSelectedConditions] = useState<string[]>([]);
   const [movementIndex, setMovementIndex] = useState(0);
@@ -82,6 +72,19 @@ export default function App() {
   const [saveStatus, setSaveStatus] = useState('Saved on this device');
   const [toast, setToast] = useState('');
   const nameRef = useRef<HTMLInputElement>(null);
+  const importRef = useRef<HTMLInputElement>(null);
+  const libraryRef = useRef(library);
+  libraryRef.current = library;
+
+  function setCharacter(next: Character | ((current: Character) => Character)) {
+    setLibrary(current => ({ ...current, draft: typeof next === 'function' ? next(current.draft) : next }));
+  }
+  function setWeaponId(next: string) {
+    setCharacter(current => ({ ...current, loadout: { ...current.loadout, weaponId: next } }));
+  }
+  function setCustomSpeed(next: string) {
+    setCharacter(current => ({ ...current, loadout: { ...current.loadout, customSpeed: next } }));
+  }
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -95,9 +98,13 @@ export default function App() {
   }
 
   useEffect(() => {
-    try { localStorage.setItem(storageKey, JSON.stringify(character)); setSaveStatus('Saved on this device'); }
+    try {
+      writeLibrary(localStorage, library);
+      const saved = library.characters.find(item => item.id === library.activeId);
+      setSaveStatus(saved && JSON.stringify(saved.character) === JSON.stringify(character) ? 'Saved on this device' : 'Draft saved · save to library');
+    }
     catch { setSaveStatus('Browser storage unavailable'); }
-  }, [character]);
+  }, [library, character]);
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(''), 3500); return () => clearTimeout(timer); }, [toast]);
 
   const weapon = weaponProfiles.find(item => item.id === weaponId)!;
@@ -143,10 +150,60 @@ export default function App() {
     setRolls(current => [{ ...outcome, id: crypto.randomUUID(), weapon: weapon.name, character: character.name || 'Unnamed gunslinger', range: ranges[rangeIndex].label, firstShot, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }, ...current].slice(0, 50));
   }
   function exportCharacter() {
-    const blob = new Blob([JSON.stringify(character, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a'); link.href = url; link.download = `${character.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'gunslinger'}.json`; link.click(); URL.revokeObjectURL(url);
-    setToast('Character exported. Keep it for your next ride.');
+    try {
+      const blob = new Blob([exportCharacterJson(character)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a'); link.href = url; link.download = `${character.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'gunslinger'}.json`; link.click(); URL.revokeObjectURL(url);
+      setLibraryError('');
+      setToast('Character exported. Keep it for your next ride.');
+    } catch (caught) { setLibraryError(caught instanceof Error ? caught.message : 'Could not export this character.'); }
+  }
+  function commitLibrary(next: CharacterLibrary, message: string) {
+    setLibrary(next);
+    setLibraryError('');
+    try { writeLibrary(localStorage, next); setToast(message); }
+    catch {
+      setLibraryError('Browser storage is unavailable. Changes are kept for this session only; export a copy to keep them.');
+      setSaveStatus('Browser storage unavailable');
+    }
+  }
+  function saveSheet() {
+    try {
+      const next = saveDraft(library, crypto.randomUUID());
+      commitLibrary(next, `${next.draft.name} saved to your library.`);
+      setSelectedCharacterId(next.activeId!);
+    } catch (caught) { setLibraryError(caught instanceof Error ? caught.message : 'Check the character sheet before saving.'); }
+  }
+  function loadSheet() {
+    try {
+      const next = loadSaved(library, selectedCharacterId);
+      commitLibrary(next, `${next.draft.name || 'Unnamed gunslinger'} loaded.`);
+      resetConditions(); setRangeIndex(0);
+    } catch (caught) { setLibraryError(caught instanceof Error ? caught.message : 'Could not load this character.'); }
+  }
+  function deleteSheet() {
+    const next = removeSaved(library, selectedCharacterId);
+    commitLibrary(next, 'Removed from the library. Your open sheet is still here.');
+    setSelectedCharacterId(next.activeId || '');
+  }
+  function startCharacter(next: Character) {
+    setLibrary(current => ({ ...current, draft: next, activeId: null }));
+    setSelectedCharacterId(''); setLibraryError('');
+    setRangeIndex(0); resetConditions(); setDialog(null);
+  }
+  async function handleImport(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    if (!file) return;
+    setIsImporting(true); setLibraryError('');
+    try {
+      const text = await readCharacterFile(file);
+      const next = importCharacter(libraryRef.current, text, crypto.randomUUID());
+      commitLibrary(next, `${next.draft.name} imported and added to your library.`);
+      setSelectedCharacterId(next.activeId!);
+      resetConditions(); setRangeIndex(0);
+    } catch (caught) { setLibraryError(caught instanceof Error ? caught.message : 'Could not import that character file.'); }
+    finally { setIsImporting(false); }
   }
   const modifierLabel = weapons.find(item => item.value === speed)?.label || 'Custom';
 
@@ -171,6 +228,17 @@ export default function App() {
       <div className="workspace">
         <aside className="character-card card" id="character-sheet">
           <div className="section-heading"><div className="title-with-icon"><UserRound size={18}/><h2>The gunslinger</h2></div><button className="text-button" onClick={() => { setNewName(''); setDialog('new'); }}><Plus size={14}/> New</button></div>
+          <div className="character-library">
+            <label htmlFor="saved-character">SAVED CHARACTERS <span>{library.characters.length}</span></label>
+            <div className="library-controls">
+              <select id="saved-character" value={selectedCharacterId} onChange={event => setSelectedCharacterId(event.target.value)}>
+                <option value="">Choose a character</option>
+                {library.characters.map((entry, index) => <option key={entry.id} value={entry.id}>{entry.character.name || 'Unnamed gunslinger'}{library.characters.some((other, otherIndex) => otherIndex !== index && other.character.name === entry.character.name) ? ` (${index + 1})` : ''}</option>)}
+              </select>
+              <button type="button" className="export-button" onClick={loadSheet} disabled={!selectedCharacterId}><FolderOpen size={14}/> Load</button>
+              <button type="button" className="icon-button library-delete" onClick={deleteSheet} disabled={!selectedCharacterId} aria-label="Delete selected saved character" title="Remove selected character from library"><Trash2 size={14}/></button>
+            </div>
+          </div>
           <div className="character-identity"><div className="character-emblem"><BadgeStar/></div><div><label htmlFor="character-name">NAME ON THE WANTED POSTER</label><input ref={nameRef} id="character-name" className="name-input" maxLength={80} value={character.name} placeholder="Your gunslinger’s name" onChange={event => setCharacter({ ...character, name: event.target.value })}/></div></div>
           <div className="input-tabs" aria-label="Character input mode"><button className={character.mode === 'scores' ? 'active' : ''} onClick={() => switchMode('scores')}>Sheet scores</button><button className={character.mode === 'modifiers' ? 'active' : ''} onClick={() => switchMode('modifiers')}>Modifiers</button></div>
           <p className="input-help">{character.mode === 'scores' ? 'Enter your final sheet scores. We’ll find the modifiers.' : 'Enter the signed modifiers from your character sheet.'}</p>
@@ -178,7 +246,16 @@ export default function App() {
             {character.mode === 'scores' ? scoreFields.map(field => { const Icon = field.icon; return <div className="stat-row" key={field.key}><Icon size={17}/><label htmlFor={`score-${field.key}`}>{field.label}<small>{field.hint}</small></label><input id={`score-${field.key}`} type="number" min={field.key === 'gunfights' ? 0 : 1} max={field.key === 'gunfights' ? 999 : 100} step="1" value={character.abilities[field.key]} onChange={event => setCharacter({ ...character, abilities: { ...character.abilities, [field.key]: event.target.value } })}/></div>; }) : modifierFields.map(field => { const Icon = field.icon; return <div className="stat-row" key={field.key}><Icon size={17}/><label htmlFor={`mod-${field.key}`}>{field.label}<small>{field.hint}</small></label><input id={`mod-${field.key}`} type="number" min="-100" max="100" step="1" value={character.modifiers[field.key]} onChange={event => setCharacter({ ...character, modifiers: { ...character.modifiers, [field.key]: event.target.value } })}/></div>; })}
           </div>
           <div className="sheet-footnote"><CircleHelp size={15}/><span>{character.mode === 'scores' ? 'Use 100 for 00. Include any creation or survival improvements already on your sheet.' : 'Positive bonuses and negative penalties both work. Weapon speed is set in your loadout.'}</span></div>
-          <div className="character-bottom"><span className={`save-status ${saveStatus.includes('unavailable') ? 'unsaved' : ''}`}><span/>{saveStatus}</span><button className="export-button" onClick={exportCharacter}><ArrowDownToLine size={15}/> Export</button></div>
+          <div className="character-bottom">
+            <div className="character-actions">
+              <button type="button" className="export-button save-sheet-button" onClick={saveSheet}><Save size={14}/> Save sheet</button>
+              <button type="button" className="export-button" onClick={() => importRef.current?.click()} disabled={isImporting}><Upload size={14}/> {isImporting ? 'Importing…' : 'Import'}</button>
+              <button type="button" className="export-button" onClick={exportCharacter}><ArrowDownToLine size={14}/> Export</button>
+              <input ref={importRef} type="file" accept=".json,application/json" hidden aria-label="Import character JSON" onChange={handleImport}/>
+            </div>
+            <span className={`save-status ${saveStatus.includes('unavailable') ? 'unsaved' : ''}`} role="status"><span/>{saveStatus}</span>
+            {libraryError && <p className="validation-error library-error" role="alert">{libraryError}</p>}
+          </div>
           <div className="character-note"><Sparkles size={14}/><span>Start with the Colorado Kid example, or make this sheet your own.</span></div>
         </aside>
 
@@ -219,6 +296,6 @@ export default function App() {
     </main>
     {toast && <div className="toast" role="status"><Check size={17}/>{toast}</div>}
     {dialog === 'rules' && <Dialog title="A little rules refresher" onClose={() => setDialog(null)}><div className="rules-content"><span className="eyebrow">BOOT HILL · SECOND EDITION</span><h3>Fast hands. Straight shooting.</h3><p><b>First shot</b> = speed ability modifier + bravery speed modifier + weapon speed modifier + situational speed modifiers. Higher scores shoot first; ties fire simultaneously. This score is not rolled.</p><p><b>Hit determination</b> = 50 + gun or throwing accuracy modifier + bravery accuracy modifier + experience modifier + range and situational modifiers. Roll d100: a result at or below that threshold hits.</p><p><b>Sheet scores</b> are the final percentile scores on your character sheet, including any creation or survival adjustments. Experience uses your previous number of gunfights. You can also enter your sheet’s modifiers directly. Each input mode keeps its own values; switching to Modifiers converts your current scores.</p><p><b>Range</b> uses the selected weapon’s chart in map spaces or tabletop inches. Each map space / tabletop inch represents six feet. Choose the applicable band; targets beyond the listed extreme range are out of range.</p><p><b>Situational modifiers</b> are cumulative. Check the weapon-at-rest restriction, referee decisions about protective cover, and which bonuses apply to your attack. Shotgun and scatter-gun accuracy bonuses are included automatically. Wound location, severity, and multiple pellet effects still use the rulebook.</p><p className="reference-note">Checked against the local 2e rulebook: ability tables p. 5, base numbers pp. 6–7, weapons p. 8, combat modifiers p. 9. No automatic misses, critical hits, or extra house rules are added.</p><button className="roll-button" onClick={() => setDialog(null)}>Back to the tabletop<ArrowRight size={16}/></button></div></Dialog>}
-    {dialog === 'new' && <Dialog title="A new face in town" onClose={() => setDialog(null)}><form className="new-character-form" onSubmit={event => { event.preventDefault(); setCharacter({ name: newName.trim() || 'Unnamed gunslinger', mode: 'modifiers', abilities: { speed: '20', gunAccuracy: '30', throwingAccuracy: '30', bravery: '25', gunfights: '0' }, modifiers: { ...initialSheet } }); setWeaponId('double-action'); setRangeIndex(0); resetConditions(); setDialog(null); setToast('Your new sheet is ready. Enter your character’s stats.'); }}><p>Give your gunslinger a name, then fill in their character sheet. Export your current character if you want to keep a copy.</p><label htmlFor="new-name">Character name<input id="new-name" autoFocus maxLength={80} placeholder="A name the West will remember" value={newName} onChange={event => setNewName(event.target.value)}/></label><button className="roll-button" type="submit">Create character<ArrowRight size={16}/></button><button className="example-button" type="button" onClick={() => { setCharacter(sample); setWeaponId('double-action'); setRangeIndex(0); resetConditions(); setDialog(null); }}>Use the Colorado Kid example</button></form></Dialog>}
+    {dialog === 'new' && <Dialog title="A new face in town" onClose={() => setDialog(null)}><form className="new-character-form" onSubmit={event => { event.preventDefault(); startCharacter({ name: newName.trim() || 'Unnamed gunslinger', mode: 'modifiers', abilities: { speed: '20', gunAccuracy: '30', throwingAccuracy: '30', bravery: '25', gunfights: '0' }, modifiers: { ...initialSheet }, loadout: { ...sample.loadout } }); setToast('Your new sheet is ready. Fill it in, then Save sheet to keep it in your library.'); }}><p>Give your gunslinger a name, then fill in their character sheet. Save any changes to your current sheet before starting another.</p><label htmlFor="new-name">Character name<input id="new-name" autoFocus maxLength={80} placeholder="A name the West will remember" value={newName} onChange={event => setNewName(event.target.value)}/></label><button className="roll-button" type="submit">Create character<ArrowRight size={16}/></button><button className="example-button" type="button" onClick={() => startCharacter(sample)}>Use the Colorado Kid example</button></form></Dialog>}
   </>;
 }
