@@ -2,9 +2,11 @@ import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'r
 import { ArrowDownToLine, ArrowRight, BookOpen, Check, ChevronDown, CircleHelp, Crosshair, Dice5, FolderOpen, History, Moon, Plus, RotateCcw, Save, Settings2, Shield, Sparkles, Star, Sun, Target, Trash2, Upload, UserRound, X, Zap } from 'lucide-react';
 import { abilityModifiers, calculate, conditions, initialSheet, parseSheet, probability, ranges, resolveHit, rollPercentile, shooterMovement, signed, targetMovement, weaponProfiles, weapons, type AbilityForm, type SheetForm, type StatKey } from './rules';
 import { exportCharacterJson, importCharacter, loadSaved, readCharacterFile, readLibrary, removeSaved, sample, saveDraft, writeLibrary, type Character, type CharacterLibrary } from './characters';
+import WoundResult, { WoundDetails } from './WoundResult';
+import { hitEffectsSummary, rollHitEffects, type HitContext, type HitEffects } from './wounds';
 
 type InputMode = 'scores' | 'modifiers';
-type Roll = { id: string; roll: number; chance: number; hit: boolean; weapon: string; character: string; range: string; firstShot: number; time: string };
+type Roll = HitContext & { id: string; roll: number; chance: number; weapon: string; character: string; range: string; firstShot: number; time: string; woundResult?: HitEffects };
 
 function BadgeStar({ className = '' }: { className?: string }) {
   return <svg className={className} viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="m32 6 7 16 17-2-11 14 7 16-20-5-20 5 7-16L8 20l17 2Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /><circle cx="32" cy="31" r="8" stroke="currentColor" strokeWidth="1.5" /><circle cx="32" cy="6" r="2" fill="currentColor" /><circle cx="8" cy="20" r="2" fill="currentColor" /><circle cx="56" cy="20" r="2" fill="currentColor" /><circle cx="12" cy="50" r="2" fill="currentColor" /><circle cx="52" cy="50" r="2" fill="currentColor" /></svg>;
@@ -71,7 +73,6 @@ export default function App() {
   const [newName, setNewName] = useState('');
   const [saveStatus, setSaveStatus] = useState('Saved on this device');
   const [toast, setToast] = useState('');
-  const nameRef = useRef<HTMLInputElement>(null);
   const importRef = useRef<HTMLInputElement>(null);
   const libraryRef = useRef(library);
   libraryRef.current = library;
@@ -147,7 +148,15 @@ export default function App() {
   function roll() {
     if (!valid) return;
     const outcome = resolveHit(rollPercentile(), baseHit, ranges[rangeIndex].value, accuracyAdjustment);
-    setRolls(current => [{ ...outcome, id: crypto.randomUUID(), weapon: weapon.name, character: character.name || 'Unnamed gunslinger', range: ranges[rangeIndex].label, firstShot, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }, ...current].slice(0, 50));
+    setRolls(current => [{ ...outcome, id: crypto.randomUUID(), weapon: weapon.name, weaponId: weapon.id, rangeIndex, character: character.name || 'Unnamed gunslinger', range: ranges[rangeIndex].label, firstShot, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }, ...current].slice(0, 50));
+  }
+  function resolveWounds(id: string) {
+    const hit = rolls.find(item => item.id === id);
+    if (!hit || !hit.hit || hit.woundResult) return;
+    // Use the weapon and range recorded for this shot, even if the loadout
+    // has changed. Generate dice outside React's replayable state updater.
+    const woundResult = rollHitEffects(hit);
+    setRolls(current => current.map(item => item.id === id && !item.woundResult ? { ...item, woundResult } : item));
   }
   function exportCharacter() {
     try {
@@ -210,10 +219,10 @@ export default function App() {
   return <>
     <header className="site-header"><div className="header-inner">
       <a className="brand" href="#" aria-label="Boot Hill home"><BadgeStar/><span>BOOT HILL<small>THE GUNSLINGER’S COMPANION</small></span></a>
-      <nav aria-label="Main navigation"><a className="nav-active" href="#tabletop"><Dice5 size={16}/>Tabletop</a><button onClick={() => { nameRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); nameRef.current?.focus({ preventScroll: true }); }}><UserRound size={16}/>Character</button><button onClick={() => setDialog('rules')}><BookOpen size={16}/>Rules reference</button></nav>
       <div className="header-actions">
         <span className="edition">SECOND EDITION <span>1979</span></span>
-        <button className="theme-toggle" type="button" onClick={toggleTheme} aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`} title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}>
+        <button className="header-button" type="button" onClick={() => setDialog('rules')}><BookOpen size={16}/>Rules reference</button>
+        <button className="header-button theme-toggle" type="button" onClick={toggleTheme} aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`} title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}>
           {theme === 'light' ? <Moon size={16}/> : <Sun size={16}/>}
           <span>{theme === 'light' ? 'Dark mode' : 'Light mode'}</span>
         </button>
@@ -239,7 +248,7 @@ export default function App() {
               <button type="button" className="icon-button library-delete" onClick={deleteSheet} disabled={!selectedCharacterId} aria-label="Delete selected saved character" title="Remove selected character from library"><Trash2 size={14}/></button>
             </div>
           </div>
-          <div className="character-identity"><div className="character-emblem"><BadgeStar/></div><div><label htmlFor="character-name">NAME ON THE WANTED POSTER</label><input ref={nameRef} id="character-name" className="name-input" maxLength={80} value={character.name} placeholder="Your gunslinger’s name" onChange={event => setCharacter({ ...character, name: event.target.value })}/></div></div>
+          <div className="character-identity"><div className="character-emblem"><BadgeStar/></div><div><label htmlFor="character-name">NAME ON THE WANTED POSTER</label><input id="character-name" className="name-input" maxLength={80} value={character.name} placeholder="Your gunslinger’s name" onChange={event => setCharacter({ ...character, name: event.target.value })}/></div></div>
           <div className="input-tabs" aria-label="Character input mode"><button className={character.mode === 'scores' ? 'active' : ''} onClick={() => switchMode('scores')}>Sheet scores</button><button className={character.mode === 'modifiers' ? 'active' : ''} onClick={() => switchMode('modifiers')}>Modifiers</button></div>
           <p className="input-help">{character.mode === 'scores' ? 'Enter your final sheet scores. We’ll find the modifiers.' : 'Enter the signed modifiers from your character sheet.'}</p>
           <div className="stat-fields">
@@ -289,13 +298,22 @@ export default function App() {
             <div className="roll-area"><div className={`dice-result ${latest ? latest.hit ? 'is-hit' : 'is-miss' : ''}`} key={latest?.id || 'empty'}><div className="percentile-dice" aria-hidden="true"><span>{latest ? String(Math.floor((latest.roll % 100) / 10) * 10).padStart(2, '0') : '00'}</span><span>{latest ? latest.roll % 10 : '0'}</span></div><div className="roll-outcome" aria-live="polite" aria-atomic="true">{latest ? <><strong>{latest.hit ? 'Right on target.' : 'Wide of the mark.'}</strong><p>Rolled <b>{String(latest.roll).padStart(2, '0')}</b> against <b>{latest.chance}</b> <span className={`result-tag ${latest.hit ? 'hit' : 'miss'}`}>{latest.hit ? 'HIT' : 'MISS'}</span></p></> : <><strong>Fortune favors the bold.</strong><p>Your next shot is one roll away.</p></>}</div></div><button className="roll-button" onClick={roll} disabled={!valid}><Dice5 size={20}/>{latest ? 'Roll again' : 'Roll to hit'}<ArrowRight size={18}/></button></div>
           </section>
 
-          <section className="history-card card"><div className="section-heading"><div className="title-with-icon"><History size={17}/><h2>The trail so far</h2><span className="count-badge">{rolls.length}</span></div><button className="text-button" disabled={!rolls.length} onClick={() => setRolls([])}><Trash2 size={13}/>Clear</button></div>{rolls.length ? <div className="history-list">{rolls.slice(0, 5).map(item => <div className="history-row" key={item.id}><span className={`history-die ${item.hit ? 'hit' : 'miss'}`}>{String(item.roll).padStart(2, '0')}</span><div className="history-description"><strong>{item.weapon}</strong><small>{item.character} · {item.range} range · ≤ {item.chance} · first shot {signed(item.firstShot)}</small></div><span className={`result-tag ${item.hit ? 'hit' : 'miss'}`}>{item.hit ? 'HIT' : 'MISS'}</span><time>{item.time}</time></div>)}</div> : <div className="history-empty"><span className="trail-line"/><p>A clean slate. Let’s see what the dice have in store.</p><span className="trail-line"/></div>} {rolls.length > 5 && <p className="history-limit">Showing the last 5 of {rolls.length} rolls this session.</p>}</section>
+          {latest?.hit && <WoundResult weapon={latest.weapon} range={latest.range} result={latest.woundResult} onRoll={() => resolveWounds(latest.id)}/>}
+
+          <section className="history-card card">
+            <div className="section-heading"><div className="title-with-icon"><History size={17}/><h2>The trail so far</h2><span className="count-badge">{rolls.length}</span></div><button className="text-button" disabled={!rolls.length} onClick={() => setRolls([])}><Trash2 size={13}/>Clear</button></div>
+            {rolls.length ? <div className="history-list">{rolls.slice(0, 5).map(item => <div className="history-entry" key={item.id}>
+              <div className="history-row"><span className={`history-die ${item.hit ? 'hit' : 'miss'}`}>{String(item.roll).padStart(2, '0')}</span><div className="history-description"><strong>{item.weapon}</strong><small>{item.character} · {item.range} range · ≤ {item.chance} · first shot {signed(item.firstShot)}</small></div><span className={`result-tag ${item.hit ? 'hit' : 'miss'}`}>{item.hit ? 'HIT' : 'MISS'}</span><time>{item.time}</time></div>
+              {item.hit && <div className="history-wounds">{item.woundResult ? <details><summary>{hitEffectsSummary(item.woundResult)}<ChevronDown size={13}/></summary><WoundDetails result={item.woundResult}/></details> : <button className="text-button" onClick={() => resolveWounds(item.id)} aria-label={`Roll wounds for ${item.weapon}, shot at ${item.time}`}><Dice5 size={13}/>Roll wounds</button>}</div>}
+            </div>)}</div> : <div className="history-empty"><span className="trail-line"/><p>A clean slate. Let’s see what the dice have in store.</p><span className="trail-line"/></div>}
+            {rolls.length > 5 && <p className="history-limit">Showing the last 5 of {rolls.length} rolls this session.</p>}
+          </section>
         </div>
       </div>
       <footer><span><BadgeStar/> An unofficial companion for Boot Hill, 2nd Edition.</span></footer>
     </main>
     {toast && <div className="toast" role="status"><Check size={17}/>{toast}</div>}
-    {dialog === 'rules' && <Dialog title="A little rules refresher" onClose={() => setDialog(null)}><div className="rules-content"><span className="eyebrow">BOOT HILL · SECOND EDITION</span><h3>Fast hands. Straight shooting.</h3><p><b>First shot</b> = speed ability modifier + bravery speed modifier + weapon speed modifier + situational speed modifiers. Higher scores shoot first; ties fire simultaneously. This score is not rolled.</p><p><b>Hit determination</b> = 50 + gun or throwing accuracy modifier + bravery accuracy modifier + experience modifier + range and situational modifiers. Roll d100: a result at or below that threshold hits.</p><p><b>Sheet scores</b> are the final percentile scores on your character sheet, including any creation or survival adjustments. Experience uses your previous number of gunfights. You can also enter your sheet’s modifiers directly. Each input mode keeps its own values; switching to Modifiers converts your current scores.</p><p><b>Range</b> uses the selected weapon’s chart in map spaces or tabletop inches. Each map space / tabletop inch represents six feet. Choose the applicable band; targets beyond the listed extreme range are out of range.</p><p><b>Situational modifiers</b> are cumulative. Check the weapon-at-rest restriction, referee decisions about protective cover, and which bonuses apply to your attack. Shotgun and scatter-gun accuracy bonuses are included automatically. Wound location, severity, and multiple pellet effects still use the rulebook.</p><p className="reference-note">Checked against the local 2e rulebook: ability tables p. 5, base numbers pp. 6–7, weapons p. 8, combat modifiers p. 9. No automatic misses, critical hits, or extra house rules are added.</p><button className="roll-button" onClick={() => setDialog(null)}>Back to the tabletop<ArrowRight size={16}/></button></div></Dialog>}
+    {dialog === 'rules' && <Dialog title="A little rules refresher" onClose={() => setDialog(null)}><div className="rules-content"><span className="eyebrow">BOOT HILL · SECOND EDITION</span><h3>Fast hands. Straight shooting.</h3><p><b>First shot</b> = speed ability modifier + bravery speed modifier + weapon speed modifier + situational speed modifiers. Higher scores shoot first; ties fire simultaneously. This score is not rolled.</p><p><b>Hit determination</b> = 50 + gun or throwing accuracy modifier + bravery accuracy modifier + experience modifier + range and situational modifiers. Roll d100: a result at or below that threshold hits.</p><p><b>Sheet scores</b> are the final percentile scores on your character sheet, including any creation or survival adjustments. Experience uses your previous number of gunfights. You can also enter your sheet’s modifiers directly. Each input mode keeps its own values; switching to Modifiers converts your current scores.</p><p><b>Range</b> uses the selected weapon’s chart in map spaces or tabletop inches. Each map space / tabletop inch represents six feet. Choose the applicable band; targets beyond the listed extreme range are out of range.</p><p><b>Situational modifiers</b> are cumulative. Check the weapon-at-rest restriction, referee decisions about protective cover, and which bonuses apply to your attack. Shotgun and scatter-gun accuracy bonuses are included automatically. After a hit, Roll wounds resolves location, severity, and shotgun or scatter-gun wound counts. Apply the results to the target.</p><p className="reference-note">Checked against the local 2e rulebook: ability tables p. 5, base numbers pp. 6–7, weapons p. 8, combat modifiers p. 9, wounds p. 10. No automatic misses, critical hits, or extra house rules are added.</p><button className="roll-button" onClick={() => setDialog(null)}>Back to the tabletop<ArrowRight size={16}/></button></div></Dialog>}
     {dialog === 'new' && <Dialog title="A new face in town" onClose={() => setDialog(null)}><form className="new-character-form" onSubmit={event => { event.preventDefault(); startCharacter({ name: newName.trim() || 'Unnamed gunslinger', mode: 'modifiers', abilities: { speed: '20', gunAccuracy: '30', throwingAccuracy: '30', bravery: '25', gunfights: '0' }, modifiers: { ...initialSheet }, loadout: { ...sample.loadout } }); setToast('Your new sheet is ready. Fill it in, then Save sheet to keep it in your library.'); }}><p>Give your gunslinger a name, then fill in their character sheet. Save any changes to your current sheet before starting another.</p><label htmlFor="new-name">Character name<input id="new-name" autoFocus maxLength={80} placeholder="A name the West will remember" value={newName} onChange={event => setNewName(event.target.value)}/></label><button className="roll-button" type="submit">Create character<ArrowRight size={16}/></button><button className="example-button" type="button" onClick={() => startCharacter(sample)}>Use the Colorado Kid example</button></form></Dialog>}
   </>;
 }
