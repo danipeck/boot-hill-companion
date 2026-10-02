@@ -74,10 +74,37 @@ test('never rolls injuries for a miss or invalid shot context', () => {
   assert.equal(rolls.calls(), 0);
 });
 
+test('every spread result matches the supplied effects table, with zero read as ten', () => {
+  // Rows transcribed from the supplied rulebook image; columns are short,
+  // medium, long, extreme. Check all percentile values against that source.
+  const printedRows = [
+    { scatter: [1, 1, 0, 0], shotgun: [1, 1, 1, 0] },
+    { scatter: [1, 1, 0, 0], shotgun: [2, 1, 1, 0] },
+    { scatter: [1, 1, 1, 0], shotgun: [2, 1, 1, 1] },
+    { scatter: [1, 1, 1, 0], shotgun: [2, 1, 1, 1] },
+    { scatter: [2, 1, 1, 1], shotgun: [3, 2, 1, 1] },
+    { scatter: [2, 1, 1, 1], shotgun: [3, 2, 1, 1] },
+    { scatter: [2, 1, 1, 1], shotgun: [3, 2, 1, 1] },
+    { scatter: [2, 1, 1, 1], shotgun: [4, 2, 1, 1] },
+    { scatter: [3, 2, 1, 1], shotgun: [4, 3, 1, 1] },
+    { scatter: [3, 2, 1, 1], shotgun: [4, 3, 2, 1] },
+  ];
+  for (const weapon of ['scatter', 'shotgun'] as const) {
+    for (let range = 0; range < 4; range++) {
+      for (let roll = 1; roll <= 100; roll++) {
+        const die = roll % 10 || 10;
+        assert.deepEqual(spreadWoundCount(weapon, range, roll),
+          { die, count: printedRows[die - 1][weapon][range] },
+          `${weapon}, range ${range}, percentile ${roll}`);
+      }
+    }
+  }
+});
+
 test('shotgun and scatter-gun wound distributions match each printed range column', () => {
   const expected = {
-    scatter: [{ 1: 40, 2: 40, 3: 20 }, { 1: 80, 2: 20 }, { 0: 30, 1: 70 }, { 0: 40, 1: 60 }],
-    shotgun: [{ 2: 40, 3: 30, 4: 30 }, { 1: 30, 2: 50, 3: 20 }, { 1: 90, 2: 10 }, { 0: 20, 1: 80 }],
+    scatter: [{ 1: 40, 2: 40, 3: 20 }, { 1: 80, 2: 20 }, { 0: 20, 1: 80 }, { 0: 40, 1: 60 }],
+    shotgun: [{ 1: 10, 2: 30, 3: 30, 4: 30 }, { 1: 40, 2: 40, 3: 20 }, { 1: 90, 2: 10 }, { 0: 20, 1: 80 }],
   };
   for (const weapon of ['scatter', 'shotgun'] as const) {
     for (let range = 0; range < 4; range++) {
@@ -90,7 +117,7 @@ test('shotgun and scatter-gun wound distributions match each printed range colum
     }
   }
   assert.deepEqual(spreadWoundCount('shotgun', 0, 100), { die: 10, count: 4 });
-  assert.deepEqual(spreadWoundCount('scatter', 2, 34), { die: 4, count: 0 });
+  assert.deepEqual(spreadWoundCount('scatter', 2, 34), { die: 4, count: 1 });
 });
 
 test('zero-wound spread results stop without rolling location or severity', () => {

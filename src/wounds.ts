@@ -54,12 +54,12 @@ export function resolveWound(locationRoll: number, severityRoll: number): Wound 
 // Shotgun / Scatter Gun Effects Table, p. 10. Columns: short, medium,
 // long, extreme. A percentile roll's final digit is read as 1–10 (0 = 10).
 const scatterTable = [
-  [1, 1, 0, 0], [1, 1, 0, 0], [1, 1, 1, 0], [1, 1, 0, 0],
+  [1, 1, 0, 0], [1, 1, 0, 0], [1, 1, 1, 0], [1, 1, 1, 0],
   [2, 1, 1, 1], [2, 1, 1, 1], [2, 1, 1, 1], [2, 1, 1, 1],
   [3, 2, 1, 1], [3, 2, 1, 1],
 ];
 const shotgunTable = [
-  [2, 1, 1, 0], [2, 1, 1, 0], [2, 1, 1, 1], [2, 2, 1, 1],
+  [1, 1, 1, 0], [2, 1, 1, 0], [2, 1, 1, 1], [2, 1, 1, 1],
   [3, 2, 1, 1], [3, 2, 1, 1], [3, 2, 1, 1], [4, 2, 1, 1],
   [4, 3, 1, 1], [4, 3, 2, 1],
 ];
