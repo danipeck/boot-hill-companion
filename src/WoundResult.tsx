@@ -3,7 +3,7 @@ import { hitEffectsSummary, type HitEffects } from './wounds';
 
 export function WoundDetails({ result }: { result: HitEffects }) {
   return <div className="wound-details">
-    {result.spreadRoll !== null && <p className="spread-result">Spread roll <b>{result.spreadRoll}</b> → <b>{result.spreadDie}</b> · {result.wounds.length} wound{result.wounds.length === 1 ? '' : 's'}</p>}
+    {result.spreadDie !== null && <p className="spread-result">Spread d10: <b>{result.spreadDie}</b> · {result.wounds.length} wound{result.wounds.length === 1 ? '' : 's'}</p>}
     {!result.wounds.length ? <p className="no-wounds">No wounds at this range.</p> : <div className="wound-list">
       {result.wounds.map((wound, index) => <div className={`wound-result severity-${wound.severity.toLowerCase()}`} key={index}>
         <div className="wound-result-heading"><strong>{result.wounds.length > 1 && <span className="wound-number">{index + 1}.</span>}{wound.location}</strong><span className="wound-severity">{wound.severity} wound</span></div>
