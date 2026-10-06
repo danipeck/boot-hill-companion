@@ -4,9 +4,13 @@ import { abilityModifiers, calculate, conditions, initialSheet, parseSheet, prob
 import { exportCharacterJson, importCharacter, loadSaved, readCharacterFile, readLibrary, removeSaved, sample, saveDraft, writeLibrary, type Character, type CharacterLibrary } from './characters';
 import WoundResult, { WoundDetails } from './WoundResult';
 import { hitEffectsSummary, rollHitEffects, type HitContext, type HitEffects } from './wounds';
+import EncounterPanel from './EncounterPanel';
+import BrawlPanel, { BrawlDetails, type BrawlRoll } from './BrawlPanel';
+import { continueHold, rollBrawl, type BrawlOptions, type CombatMode } from './brawling';
+import { advancePhase, applyBrawl, applyShotWounds, canAct, newEncounter, phaseNames, readEncounter, releaseHold, trackedShootingModifiers, updateActingSheet, withDefaultTarget, writeEncounter, type ActionContext, type Encounter } from './encounter';
 
 type InputMode = 'scores' | 'modifiers';
-type Roll = HitContext & { id: string; roll: number; chance: number; weapon: string; character: string; range: string; firstShot: number; time: string; woundResult?: HitEffects };
+type Roll = HitContext & { kind: 'shot'; order: number; id: string; roll: number; chance: number; weapon: string; character: string; range: string; firstShot: number; time: string; woundResult?: HitEffects; context?: ActionContext; targetName: string };
 
 function BadgeStar({ className = '' }: { className?: string }) {
   return <svg className={className} viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="m32 6 7 16 17-2-11 14 7 16-20-5-20 5 7-16L8 20l17 2Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /><circle cx="32" cy="31" r="8" stroke="currentColor" strokeWidth="1.5" /><circle cx="32" cy="6" r="2" fill="currentColor" /><circle cx="8" cy="20" r="2" fill="currentColor" /><circle cx="56" cy="20" r="2" fill="currentColor" /><circle cx="12" cy="50" r="2" fill="currentColor" /><circle cx="52" cy="50" r="2" fill="currentColor" /></svg>;
@@ -51,6 +55,17 @@ export default function App() {
     catch { return readLibrary({ getItem: () => null }); }
   });
   const character = library.draft;
+  const [encounter, setEncounter] = useState<Encounter>(() => {
+    try { return readEncounter(localStorage, crypto.randomUUID()); }
+    catch { return newEncounter(crypto.randomUUID()); }
+  });
+  const [combatMode, setCombatMode] = useState<CombatMode>('shooting');
+  const [encounterError, setEncounterError] = useState('');
+  const [encounterStorageError, setEncounterStorageError] = useState('');
+  const [brawlRolls, setBrawlRolls] = useState<BrawlRoll[]>([]);
+  const [gunHand, setGunHand] = useState<'left' | 'right'>('right');
+  const actor = encounter.members.find(member => member.id === encounter.actorId);
+  const encounterTarget = encounter.members.find(member => member.id === encounter.targetId);
   const { weaponId, customSpeed } = character.loadout;
   const [selectedCharacterId, setSelectedCharacterId] = useState(library.activeId || '');
   const [libraryError, setLibraryError] = useState('');
@@ -78,7 +93,9 @@ export default function App() {
   libraryRef.current = library;
 
   function setCharacter(next: Character | ((current: Character) => Character)) {
-    setLibrary(current => ({ ...current, draft: typeof next === 'function' ? next(current.draft) : next }));
+    const draft = typeof next === 'function' ? next(character) : next;
+    setLibrary(current => ({ ...current, draft }));
+    if (actor) setEncounter(current => updateActingSheet(current, draft));
   }
   function setWeaponId(next: string) {
     setCharacter(current => ({ ...current, loadout: { ...current.loadout, weaponId: next } }));
@@ -107,12 +124,90 @@ export default function App() {
     catch { setSaveStatus('Browser storage unavailable'); }
   }, [library, character]);
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(''), 3500); return () => clearTimeout(timer); }, [toast]);
+  useEffect(() => {
+    try { writeEncounter(localStorage, encounter); setEncounterStorageError(''); }
+    catch { setEncounterStorageError('Browser storage unavailable. This shootout is kept for this session only.'); }
+  }, [encounter]);
+  useEffect(() => {
+    // Resume the encounter's working sheet without overwriting a saved character.
+    const member = encounter.members.find(item => item.id === encounter.actorId);
+    if (member) {
+      const libraryId = member.libraryId || member.id;
+      setLibrary(current => ({ ...current, draft: member.sheet, activeId: current.characters.some(item => item.id === libraryId) ? libraryId : null }));
+      setSelectedCharacterId(library.characters.some(item => item.id === libraryId) ? libraryId : '');
+    }
+    if (encounter.phase !== 'shooting') setCombatMode('punching');
+  }, []);
+
+  function updateEncounter(next: Encounter) {
+    next = withDefaultTarget(next);
+    setEncounter(next); setEncounterError('');
+    if (next.phase !== encounter.phase) setCombatMode(next.phase === 'shooting' ? 'shooting' : combatMode === 'shooting' ? 'punching' : combatMode);
+    if (next.actorId && (next.actorId !== encounter.actorId || next.members.find(item => item.id === next.actorId)?.sheet !== actor?.sheet)) {
+      const member = next.members.find(item => item.id === next.actorId);
+      if (member) {
+        const libraryId = member.libraryId || member.id;
+        setLibrary(current => ({ ...current, draft: member.sheet, activeId: current.characters.some(item => item.id === libraryId) ? libraryId : null }));
+        setSelectedCharacterId(library.characters.some(item => item.id === libraryId) ? libraryId : '');
+      }
+    }
+  }
+  function selectActor(id: string) {
+    const member = encounter.members.find(item => item.id === id);
+    updateEncounter({ ...encounter, actorId: id, targetId: encounter.targetId === id ? '' : encounter.targetId });
+    if (member) resetConditions();
+  }
+  function detachActor() { setEncounter(current => withDefaultTarget({ ...current, actorId: '' })); }
+  function nextPhase() {
+    const next = advancePhase(encounter); updateEncounter(next);
+    setCombatMode(next.phase === 'shooting' ? 'shooting' : combatMode === 'shooting' ? 'punching' : combatMode);
+    if (next.phase === 'shooting') setShot('0');
+  }
+  function currentActionContext(): ActionContext | undefined {
+    return actor && encounterTarget ? { encounterId: encounter.id, actorId: actor.id, targetId: encounterTarget.id, turn: encounter.turn, phase: encounter.phase } : undefined;
+  }
+  function recordBrawl(mode: 'punching' | 'grappling', options: BrawlOptions) {
+    try {
+      const result = rollBrawl(mode, options);
+      const item: BrawlRoll = { kind: 'brawl', id: crypto.randomUUID(), order: Date.now(), character: character.name || 'Unnamed gunslinger', targetName: encounterTarget?.sheet.name || '', time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), result, context: currentActionContext(), held: options.held };
+      setBrawlRolls(current => [item, ...current].slice(0, 50));
+      setEncounterError('');
+    } catch (caught) { setEncounterError(caught instanceof Error ? caught.message : 'Could not roll this action.'); }
+  }
+  function maintainHold() {
+    const target = encounter.members.find(member => member.hold?.by === actor?.id);
+    if (!actor || !target) return;
+    const result = continueHold(target.hold!.kind);
+    const item: BrawlRoll = { kind: 'brawl', id: crypto.randomUUID(), order: Date.now(), character: actor.sheet.name, targetName: target.sheet.name, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), result, context: { encounterId: encounter.id, actorId: actor.id, targetId: target.id, turn: encounter.turn, phase: encounter.phase }, held: actor.hold?.kind ?? null };
+    setBrawlRolls(current => [item, ...current].slice(0, 50));
+    setCombatMode('grappling');
+  }
+  function applyBrawlRoll(item: BrawlRoll) {
+    if (!item.context) return;
+    try { updateEncounter(applyBrawl(encounter, item.context, item.id, item.result, item.held)); }
+    catch (caught) { setEncounterError(caught instanceof Error ? caught.message : 'Could not apply this result.'); }
+  }
+  function applyWounds(item: Roll) {
+    if (!item.context || !item.woundResult) return;
+    try { updateEncounter(applyShotWounds(encounter, item.context, item.id, item.woundResult)); }
+    catch (caught) { setEncounterError(caught instanceof Error ? caught.message : 'Could not apply these wounds.'); }
+  }
+  function woundAction(item: Roll) {
+    if (!item.context || !item.woundResult) return null;
+    const applied = encounter.applied.includes(item.id);
+    const available = item.context.encounterId === encounter.id && encounter.members.some(member => member.id === item.context!.targetId);
+    return <button className="export-button apply-result" disabled={applied || !available} onClick={() => applyWounds(item)}>{applied ? 'Applied to shootout' : `Apply wounds · ${item.targetName}`}</button>;
+  }
 
   const weapon = weaponProfiles.find(item => item.id === weaponId)!;
   const speed = weapon.ranges ? weapon.speed : Number(customSpeed);
   const selected = conditions.filter(item => selectedConditions.includes(item.id));
-  const speedAdjustment = selected.reduce((sum, item) => sum + item.speed, 0) + shooterMovement[movementIndex].speed + Number(wound) + Number(surprise) + Number(aiming) + Number(speedExtra);
-  const accuracyAdjustment = selected.reduce((sum, item) => sum + item.accuracy, 0) + shooterMovement[movementIndex].accuracy + targetMovement[targetIndex].accuracy + Number(wound) + Number(shot) + Number(gunArm) + Number(accuracyExtra) + weapon.bonus;
+  const tracked = actor ? trackedShootingModifiers(actor, gunHand) : null;
+  const woundPenalty = tracked?.wound ?? Number(wound);
+  const armPenalty = tracked?.arm ?? Number(gunArm);
+  const brawlHitModifier = tracked?.brawling ?? 0;
+  const speedAdjustment = selected.reduce((sum, item) => sum + item.speed, 0) + shooterMovement[movementIndex].speed + woundPenalty + Number(surprise) + Number(aiming) + Number(speedExtra);
+  const accuracyAdjustment = selected.reduce((sum, item) => sum + item.accuracy, 0) + shooterMovement[movementIndex].accuracy + targetMovement[targetIndex].accuracy + woundPenalty + Number(shot) + armPenalty + Number(accuracyExtra) + weapon.bonus + brawlHitModifier;
   let error = '';
   let sheet;
   let totals;
@@ -129,7 +224,10 @@ export default function App() {
   const hitChance = probability(hitThreshold);
   const firstShot = (totals?.firstShot ?? 0) + speedAdjustment;
   const latest = rolls[0];
-  const hasModifiers = selected.length > 0 || [movementIndex, targetIndex, Number(wound), Number(shot), Number(surprise), Number(aiming), Number(gunArm), Number(speedExtra), Number(accuracyExtra)].some(value => value !== 0);
+  const latestBrawl = brawlRolls.find(item => item.result.mode === combatMode);
+  const history = [...rolls, ...brawlRolls].sort((first, second) => second.order - first.order);
+  const shootingBlocked = encounter.members.length > 0 ? encounter.phase !== 'shooting' ? 'Advance to the shooting phase to fire.' : !actor ? 'Choose an acting character above, or remove the roster to roll freely.' : !canAct(actor) ? 'An unconscious or dead character cannot act.' : actor.hold?.kind === 'bear-hug' ? 'A bear hug prevents shooting; grapple to escape.' : actor.hold?.kind === `${gunHand}-arm` ? 'Your gun arm is held. Switch hands or escape the hold.' : '' : '';
+  const hasModifiers = selected.length > 0 || [movementIndex, targetIndex, woundPenalty, Number(shot), Number(surprise), Number(aiming), armPenalty, brawlHitModifier, Number(speedExtra), Number(accuracyExtra)].some(value => value !== 0);
 
   function switchMode(mode: InputMode) {
     setCharacter(current => {
@@ -146,9 +244,10 @@ export default function App() {
     setSelectedConditions([]); setMovementIndex(0); setTargetIndex(0); setWound('0'); setShot('0'); setSurprise('0'); setAiming('0'); setGunArm('0'); setSpeedExtra('0'); setAccuracyExtra('0');
   }
   function roll() {
-    if (!valid) return;
+    if (!valid || shootingBlocked) return;
     const outcome = resolveHit(rollPercentile(), baseHit, ranges[rangeIndex].value, accuracyAdjustment);
-    setRolls(current => [{ ...outcome, id: crypto.randomUUID(), weapon: weapon.name, weaponId: weapon.id, rangeIndex, character: character.name || 'Unnamed gunslinger', range: ranges[rangeIndex].label, firstShot, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }, ...current].slice(0, 50));
+    const item: Roll = { ...outcome, kind: 'shot', order: Date.now(), id: crypto.randomUUID(), weapon: weapon.name, weaponId: weapon.id, rangeIndex, character: character.name || 'Unnamed gunslinger', range: ranges[rangeIndex].label, firstShot, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), context: currentActionContext(), targetName: encounterTarget?.sheet.name || '' };
+    setRolls(current => [item, ...current].slice(0, 50));
   }
   function resolveWounds(id: string) {
     const hit = rolls.find(item => item.id === id);
@@ -179,6 +278,7 @@ export default function App() {
   function saveSheet() {
     try {
       const next = saveDraft(library, crypto.randomUUID());
+      if (actor) setEncounter(current => ({ ...current, members: current.members.map(member => member.id === actor.id ? { ...member, libraryId: next.activeId!, sheet: next.draft } : member) }));
       commitLibrary(next, `${next.draft.name} saved to your library.`);
       setSelectedCharacterId(next.activeId!);
     } catch (caught) { setLibraryError(caught instanceof Error ? caught.message : 'Check the character sheet before saving.'); }
@@ -186,6 +286,7 @@ export default function App() {
   function loadSheet() {
     try {
       const next = loadSaved(library, selectedCharacterId);
+      detachActor();
       commitLibrary(next, `${next.draft.name || 'Unnamed gunslinger'} loaded.`);
       resetConditions(); setRangeIndex(0);
     } catch (caught) { setLibraryError(caught instanceof Error ? caught.message : 'Could not load this character.'); }
@@ -196,6 +297,7 @@ export default function App() {
     setSelectedCharacterId(next.activeId || '');
   }
   function startCharacter(next: Character) {
+    detachActor();
     setLibrary(current => ({ ...current, draft: next, activeId: null }));
     setSelectedCharacterId(''); setLibraryError('');
     setRangeIndex(0); resetConditions(); setDialog(null);
@@ -208,6 +310,7 @@ export default function App() {
     try {
       const text = await readCharacterFile(file);
       const next = importCharacter(libraryRef.current, text, crypto.randomUUID());
+      detachActor();
       commitLibrary(next, `${next.draft.name} imported and added to your library.`);
       setSelectedCharacterId(next.activeId!);
       resetConditions(); setRangeIndex(0);
@@ -249,9 +352,16 @@ export default function App() {
             </div>
           </div>
           <div className="character-identity"><div className="character-emblem"><BadgeStar/></div><div><label htmlFor="character-name">NAME ON THE WANTED POSTER</label><input id="character-name" className="name-input" maxLength={80} value={character.name} placeholder="Your gunslinger’s name" onChange={event => setCharacter({ ...character, name: event.target.value })}/></div></div>
+          <div className="sheet-loadout">
+            <label htmlFor="preferred-weapon">Preferred weapon</label>
+            <select id="preferred-weapon" value={weaponId} onChange={event => setWeaponId(event.target.value)}>{weaponProfiles.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+            {!weapon.ranges && <><label htmlFor="preferred-weapon-speed">Weapon speed class</label><select id="preferred-weapon-speed" value={customSpeed} onChange={event => setCustomSpeed(event.target.value)}>{weapons.map(item => <option key={item.value} value={item.value}>{item.label} ({signed(item.value)})</option>)}</select></>}
+            <p>Changes in combat are remembered for this shootout. Save sheet to keep the choice in your library.</p>
+          </div>
           <div className="input-tabs" aria-label="Character input mode"><button className={character.mode === 'scores' ? 'active' : ''} onClick={() => switchMode('scores')}>Sheet scores</button><button className={character.mode === 'modifiers' ? 'active' : ''} onClick={() => switchMode('modifiers')}>Modifiers</button></div>
           <p className="input-help">{character.mode === 'scores' ? 'Enter your final sheet scores. We’ll find the modifiers.' : 'Enter the signed modifiers from your character sheet.'}</p>
           <div className="stat-fields">
+            <div className="stat-row"><Shield size={17}/><label htmlFor="strength-rating">Strength<small>Rating, usually 8–20</small></label><input id="strength-rating" type="number" min="1" max="99" step="1" placeholder="—" value={character.strength || ''} onChange={event => setCharacter({ ...character, strength: event.target.value })}/></div>
             {character.mode === 'scores' ? scoreFields.map(field => { const Icon = field.icon; return <div className="stat-row" key={field.key}><Icon size={17}/><label htmlFor={`score-${field.key}`}>{field.label}<small>{field.hint}</small></label><input id={`score-${field.key}`} type="number" min={field.key === 'gunfights' ? 0 : 1} max={field.key === 'gunfights' ? 999 : 100} step="1" value={character.abilities[field.key]} onChange={event => setCharacter({ ...character, abilities: { ...character.abilities, [field.key]: event.target.value } })}/></div>; }) : modifierFields.map(field => { const Icon = field.icon; return <div className="stat-row" key={field.key}><Icon size={17}/><label htmlFor={`mod-${field.key}`}>{field.label}<small>{field.hint}</small></label><input id={`mod-${field.key}`} type="number" min="-100" max="100" step="1" value={character.modifiers[field.key]} onChange={event => setCharacter({ ...character, modifiers: { ...character.modifiers, [field.key]: event.target.value } })}/></div>; })}
           </div>
           <div className="sheet-footnote"><CircleHelp size={15}/><span>{character.mode === 'scores' ? 'Use 100 for 00. Include any creation or survival improvements already on your sheet.' : 'Positive bonuses and negative penalties both work. Weapon speed is set in your loadout.'}</span></div>
@@ -269,8 +379,12 @@ export default function App() {
         </aside>
 
         <div className="combat-column">
+          <EncounterPanel encounter={encounter} current={character} saved={library.characters} activeId={library.activeId} error={encounterError} storageError={encounterStorageError} onChange={updateEncounter} onError={setEncounterError} onAdvance={nextPhase} onReset={() => { updateEncounter(newEncounter(crypto.randomUUID())); setCombatMode('shooting'); }} onActor={selectActor} onTarget={id => updateEncounter({ ...encounter, targetId: id })}/>
+          <div className="combat-mode-tabs" role="group" aria-label="Combat action">{(['shooting', 'punching', 'grappling'] as const).map(mode => <button key={mode} aria-pressed={combatMode === mode} className={combatMode === mode ? 'active' : ''} onClick={() => setCombatMode(mode)}>{mode === 'shooting' ? 'Shooting' : mode === 'punching' ? 'Punching' : 'Grappling'}</button>)}</div>
+          <div className="shooting-panels" hidden={combatMode !== 'shooting'}>
           <section className="loadout-card card"><div className="section-heading"><div className="title-with-icon"><Crosshair size={18}/><h2>Ready your weapon</h2></div><span className="small-label">01 / THE SETUP</span></div>
-            <div className="loadout-grid"><div className="weapon-illustration"><Revolver/></div><div className="weapon-field"><label htmlFor="weapon">WEAPON OF CHOICE</label><div className="select-wrap"><select id="weapon" value={weaponId} onChange={event => { setWeaponId(event.target.value); setRolls(current => current); }}>{weaponProfiles.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><ChevronDown size={16}/></div><div className="weapon-meta"><span>{weapon.attack === 'gun' ? 'Firearm' : 'Thrown / launched'}</span><i/> <span>{modifierLabel} speed <b>{signed(speed)}</b></span>{weapon.bonus !== 0 && <><i/><span>Accuracy <b>{signed(weapon.bonus)}</b></span></>}</div></div></div>
+            {actor && <div className="shootout-shooting"><p className="panel-hint">{actor.sheet.name}{encounterTarget ? ` → ${encounterTarget.sheet.name}` : ' · untracked target'} · wounds {signed(woundPenalty)} · gun arm {signed(armPenalty)} · brawling {signed(brawlHitModifier)} to hit</p><label>Gun hand<select value={gunHand} onChange={event => setGunHand(event.target.value as 'left' | 'right')}><option value="right">Right</option><option value="left">Left</option></select></label></div>}
+            <div className="loadout-grid"><div className="weapon-illustration"><Revolver/></div><div className="weapon-field"><label htmlFor="weapon">WEAPON OF CHOICE</label><div className="select-wrap"><select id="weapon" value={weaponId} onChange={event => setWeaponId(event.target.value)}>{weaponProfiles.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><ChevronDown size={16}/></div><div className="weapon-meta"><span>{weapon.attack === 'gun' ? 'Firearm' : 'Thrown / launched'}</span><i/> <span>{modifierLabel} speed <b>{signed(speed)}</b></span>{weapon.bonus !== 0 && <><i/><span>Accuracy <b>{signed(weapon.bonus)}</b></span></>}</div></div></div>
             {!weapon.ranges && <div className="custom-speed"><label htmlFor="weapon-speed">Weapon speed class</label><select id="weapon-speed" value={customSpeed} onChange={event => setCustomSpeed(event.target.value)}>{weapons.map(item => <option key={item.value} value={item.value}>{item.label} ({signed(item.value)})</option>)}</select></div>}
             <div className="range-section"><div className="range-label"><span>RANGE TO TARGET</span><span>{weapon.ranges ? 'Map spaces / tabletop inches' : 'Choose the range band for your weapon'}</span></div><div className="range-options">{ranges.map((item, index) => <button key={item.label} className={rangeIndex === index ? 'selected' : ''} onClick={() => setRangeIndex(index)} aria-pressed={rangeIndex === index}><span>{item.label}<b>{signed(item.value)}</b></span><small>{weapon.ranges ? index === 0 ? `0–${weapon.ranges[index]}` : `${weapon.ranges[index - 1]}+ to ${weapon.ranges[index]}` : 'Referee’s range band'}</small></button>)}</div></div>
             <div className="modifier-toggle-row"><button className="modifier-toggle" onClick={() => setShowModifiers(!showModifiers)} aria-expanded={showModifiers} aria-controls="combat-modifiers"><Settings2 size={16}/> Situational modifiers {hasModifiers && <span className="active-dot"/>}<ChevronDown size={16} className={showModifiers ? 'rotated' : ''}/></button><span className="modifier-summary">{hasModifiers ? `${signed(speedAdjustment)} speed · ${signed(accuracyAdjustment - weapon.bonus)} accuracy` : 'A fair fight, for now'}</span></div>
@@ -280,11 +394,11 @@ export default function App() {
               <div className="modifier-fields">
                 <label>Shooter movement<select value={movementIndex} onChange={event => setMovementIndex(Number(event.target.value))}>{shooterMovement.map((item, index) => <option key={item.label} value={index}>{item.label} ({signed(item.accuracy)} hit)</option>)}</select></label>
                 <label>Target movement<select value={targetIndex} onChange={event => setTargetIndex(Number(event.target.value))}>{targetMovement.map((item, index) => <option key={item.label} value={index}>{item.label} ({signed(item.accuracy)} hit)</option>)}</select></label>
-                <label>Total wounds<select value={wound} onChange={event => setWound(event.target.value)}><option value="0">Unwounded</option><option value="-5">Less than 50% of strength (−5)</option><option value="-20">50% or more of strength (−20)</option></select></label>
+                <label>Total wounds{actor && ' · tracked'}<select value={actor ? String(woundPenalty) : wound} disabled={!!actor} onChange={event => setWound(event.target.value)}><option value="0">Unwounded</option><option value="-5">Less than 50% of strength (−5)</option><option value="-20">50% or more of strength (−20)</option></select></label>
                 <label>Shot this turn<select value={shot} onChange={event => setShot(event.target.value)}><option value="0">First shot</option><option value="-10">Second shot (−10 hit)</option><option value="-20">Third shot (−20 hit)</option></select></label>
                 <label>Surprise<select value={surprise} onChange={event => setSurprise(event.target.value)}><option value="0">Neither side surprised</option><option value="-1">Giving opponent first move (−1)</option><option value="-5">Surprised (−5 speed)</option><option value="-10">Completely surprised (−10 speed)</option></select></label>
                 <label>Aiming / firing continuity<select value={aiming} onChange={event => setAiming(event.target.value)}><option value="0">No continuity bonus</option><option value="5">Aiming at same target, 2nd+ turn (+5)</option><option value="10">Firing at same target, 2nd+ turn (+10)</option><option value="15">Both applicable (+15 speed)</option></select></label>
-                <label>Gun-arm wound<select value={gunArm} onChange={event => setGunArm(event.target.value)}><option value="0">None</option><option value="-25">Light wound (−25 hit)</option><option value="-50">Serious wound (−50 hit)</option></select></label>
+                <label>Gun-arm wound{actor && ' · tracked'}<select value={actor ? String(armPenalty) : gunArm} disabled={!!actor} onChange={event => setGunArm(event.target.value)}><option value="0">None</option><option value="-25">Light wound (−25 hit)</option><option value="-50">Serious wound (−50 hit)</option></select></label>
                 <label>Other first-shot modifier<input type="number" min="-100" max="100" step="1" value={speedExtra} onChange={event => setSpeedExtra(event.target.value)}/></label>
                 <label>Other hit modifier<input type="number" min="-100" max="100" step="1" value={accuracyExtra} onChange={event => setAccuracyExtra(event.target.value)}/></label>
               </div><button className="text-button reset-modifiers" onClick={resetConditions}><RotateCcw size={13}/>Reset situational modifiers</button></div>}
@@ -292,28 +406,36 @@ export default function App() {
 
           <section className="shot-card card"><div className="section-heading"><div className="title-with-icon"><Dice5 size={18}/><h2>Make your shot</h2></div><span className="small-label">02 / THE MOMENT OF TRUTH</span></div>
             {error && <p className="validation-error" role="alert">{error}</p>}
+            {shootingBlocked && <p className="validation-error" role="status">{shootingBlocked}</p>}
             <div className="combat-stats"><div className="first-shot-stat"><span><Zap size={14}/> FIRST SHOT</span><strong>{valid ? signed(firstShot) : '—'}</strong><small>Highest score shoots first</small></div><div className="hit-stat"><span><Crosshair size={14}/> CHANCE TO HIT</span><strong>{valid ? hitChance : '—'}<em>%</em></strong><small>{valid ? hitThreshold < 0 || hitThreshold > 100 ? `Rules threshold: ${hitThreshold} · roll 1–100` : `Roll ${hitThreshold} or lower on d100` : 'Check your character values'}</small></div><div className="chance-bar" aria-hidden="true"><span style={{ width: `${valid ? hitChance : 0}%` }}/></div></div>
             <button className="breakdown-toggle text-button" onClick={() => setShowBreakdown(!showBreakdown)} aria-expanded={showBreakdown}>Show the arithmetic <ChevronDown size={13} className={showBreakdown ? 'rotated' : ''}/></button>
             {showBreakdown && sheet && totals && <div className="breakdown"><p><b>First shot</b><span>{signed(sheet.speed)} speed {signed(sheet.braverySpeed)} bravery {signed(sheet.weaponSpeed)} weapon {signed(speedAdjustment)} situation = <strong>{signed(firstShot)}</strong></span></p><p><b>Hit threshold</b><span>50 base {signed(weapon.attack === 'gun' ? sheet.gunAccuracy : sheet.throwingAccuracy)} accuracy {signed(sheet.braveryAccuracy)} bravery {signed(sheet.experience)} experience {signed(ranges[rangeIndex].value)} range {signed(accuracyAdjustment)} weapon / situation = <strong>{hitThreshold}</strong></span></p></div>}
-            <div className="roll-area"><div className={`dice-result ${latest ? latest.hit ? 'is-hit' : 'is-miss' : ''}`} key={latest?.id || 'empty'}><div className="percentile-dice" aria-hidden="true"><span>{latest ? String(Math.floor((latest.roll % 100) / 10) * 10).padStart(2, '0') : '00'}</span><span>{latest ? latest.roll % 10 : '0'}</span></div><div className="roll-outcome" aria-live="polite" aria-atomic="true">{latest ? <><strong>{latest.hit ? 'Right on target.' : 'Wide of the mark.'}</strong><p>Rolled <b>{String(latest.roll).padStart(2, '0')}</b> against <b>{latest.chance}</b> <span className={`result-tag ${latest.hit ? 'hit' : 'miss'}`}>{latest.hit ? 'HIT' : 'MISS'}</span></p></> : <><strong>Fortune favors the bold.</strong><p>Your next shot is one roll away.</p></>}</div></div><button className="roll-button" onClick={roll} disabled={!valid}><Dice5 size={20}/>{latest ? 'Roll again' : 'Roll to hit'}<ArrowRight size={18}/></button></div>
+            <div className="roll-area"><div className={`dice-result ${latest ? latest.hit ? 'is-hit' : 'is-miss' : ''}`} key={latest?.id || 'empty'}><div className="percentile-dice" aria-hidden="true"><span>{latest ? String(Math.floor((latest.roll % 100) / 10) * 10).padStart(2, '0') : '00'}</span><span>{latest ? latest.roll % 10 : '0'}</span></div><div className="roll-outcome" aria-live="polite" aria-atomic="true">{latest ? <><strong>{latest.hit ? 'Right on target.' : 'Wide of the mark.'}</strong><p>Rolled <b>{String(latest.roll).padStart(2, '0')}</b> against <b>{latest.chance}</b> <span className={`result-tag ${latest.hit ? 'hit' : 'miss'}`}>{latest.hit ? 'HIT' : 'MISS'}</span></p></> : <><strong>Fortune favors the bold.</strong><p>Your next shot is one roll away.</p></>}</div></div><button className="roll-button" onClick={roll} disabled={!valid || !!shootingBlocked}><Dice5 size={20}/>{latest ? 'Roll again' : 'Roll to hit'}<ArrowRight size={18}/></button></div>
           </section>
 
-          {latest?.hit && <WoundResult weapon={latest.weapon} range={latest.range} result={latest.woundResult} onRoll={() => resolveWounds(latest.id)}/>}
+          {latest?.hit && <WoundResult weapon={latest.weapon} range={latest.range} result={latest.woundResult} onRoll={() => resolveWounds(latest.id)} action={woundAction(latest)}/>}
+          </div>
+          <div hidden={combatMode === 'shooting'}><BrawlPanel mode={combatMode === 'grappling' ? 'grappling' : 'punching'} encounter={encounter} latest={latestBrawl} onRoll={recordBrawl} onContinue={maintainHold} onRelease={() => updateEncounter(releaseHold(encounter, encounter.actorId))} onApply={applyBrawlRoll}/></div>
 
           <section className="history-card card">
-            <div className="section-heading"><div className="title-with-icon"><History size={17}/><h2>The trail so far</h2><span className="count-badge">{rolls.length}</span></div><button className="text-button" disabled={!rolls.length} onClick={() => setRolls([])}><Trash2 size={13}/>Clear</button></div>
-            {rolls.length ? <div className="history-list">{rolls.slice(0, 5).map(item => <div className="history-entry" key={item.id}>
-              <div className="history-row"><span className={`history-die ${item.hit ? 'hit' : 'miss'}`}>{String(item.roll).padStart(2, '0')}</span><div className="history-description"><strong>{item.weapon}</strong><small>{item.character} · {item.range} range · ≤ {item.chance} · first shot {signed(item.firstShot)}</small></div><span className={`result-tag ${item.hit ? 'hit' : 'miss'}`}>{item.hit ? 'HIT' : 'MISS'}</span><time>{item.time}</time></div>
-              {item.hit && <div className="history-wounds">{item.woundResult ? <details><summary>{hitEffectsSummary(item.woundResult)}<ChevronDown size={13}/></summary><WoundDetails result={item.woundResult}/></details> : <button className="text-button" onClick={() => resolveWounds(item.id)} aria-label={`Roll wounds for ${item.weapon}, shot at ${item.time}`}><Dice5 size={13}/>Roll wounds</button>}</div>}
+            <div className="section-heading"><div className="title-with-icon"><History size={17}/><h2>The trail so far</h2><span className="count-badge">{history.length}</span></div><button className="text-button" disabled={!history.length} onClick={() => { setRolls([]); setBrawlRolls([]); }}><Trash2 size={13}/>Clear</button></div>
+            {history.length ? <div className="history-list">{history.slice(0, 5).map(item => <div className="history-entry" key={item.id}>
+              {item.kind === 'shot' ? <>
+                <div className="history-row"><span className={`history-die ${item.hit ? 'hit' : 'miss'}`}>{String(item.roll).padStart(2, '0')}</span><div className="history-description"><strong>Shooting · {item.weapon}</strong><small>{item.character}{item.targetName && ` → ${item.targetName}`} · {item.range} range · ≤ {item.chance} · first shot {signed(item.firstShot)}{item.context && ` · turn ${item.context.turn}`}</small></div><span className={`result-tag ${item.hit ? 'hit' : 'miss'}`}>{item.hit ? 'HIT' : 'MISS'}</span><time>{item.time}</time></div>
+                {item.hit && <div className="history-wounds">{item.woundResult ? <><details><summary>{hitEffectsSummary(item.woundResult)}<ChevronDown size={13}/></summary><WoundDetails result={item.woundResult}/></details>{woundAction(item)}</> : <button className="text-button" onClick={() => resolveWounds(item.id)} aria-label={`Roll wounds for ${item.weapon}, shot at ${item.time}`}><Dice5 size={13}/>Roll wounds</button>}</div>}
+              </> : <>
+                <div className="history-row"><span className="history-die">{item.result.adjusted ?? '—'}</span><div className="history-description"><strong>{item.result.mode === 'punching' ? 'Punching' : 'Grappling'} · {item.result.label}</strong><small>{item.character}{item.targetName && ` → ${item.targetName}`}{item.context && ` · turn ${item.context.turn} · ${phaseNames[item.context.phase]}`}</small></div><time>{item.time}</time></div>
+                <div className="history-wounds"><details><summary>Result details<ChevronDown size={13}/></summary><BrawlDetails result={item.result}/></details>{item.context && <button className="export-button apply-result" disabled={encounter.applied.includes(item.id) || item.context.encounterId !== encounter.id || item.context.turn !== encounter.turn || item.context.phase !== encounter.phase} onClick={() => applyBrawlRoll(item)}>{encounter.applied.includes(item.id) ? 'Applied to shootout' : `Apply result · ${item.targetName}`}</button>}</div>
+              </>}
             </div>)}</div> : <div className="history-empty"><span className="trail-line"/><p>A clean slate. Let’s see what the dice have in store.</p><span className="trail-line"/></div>}
-            {rolls.length > 5 && <p className="history-limit">Showing the last 5 of {rolls.length} rolls this session.</p>}
+            {history.length > 5 && <p className="history-limit">Showing the last 5 of {history.length} rolls this session.</p>}
           </section>
         </div>
       </div>
       <footer><span><BadgeStar/> An unofficial companion for Boot Hill, 2nd Edition.</span></footer>
     </main>
     {toast && <div className="toast" role="status"><Check size={17}/>{toast}</div>}
-    {dialog === 'rules' && <Dialog title="A little rules refresher" onClose={() => setDialog(null)}><div className="rules-content"><span className="eyebrow">BOOT HILL · SECOND EDITION</span><h3>Fast hands. Straight shooting.</h3><p><b>First shot</b> = speed ability modifier + bravery speed modifier + weapon speed modifier + situational speed modifiers. Higher scores shoot first; ties fire simultaneously. This score is not rolled.</p><p><b>Hit determination</b> = 50 + gun or throwing accuracy modifier + bravery accuracy modifier + experience modifier + range and situational modifiers. Roll d100: a result at or below that threshold hits.</p><p><b>Sheet scores</b> are the final percentile scores on your character sheet, including any creation or survival adjustments. Experience uses your previous number of gunfights. You can also enter your sheet’s modifiers directly. Each input mode keeps its own values; switching to Modifiers converts your current scores.</p><p><b>Range</b> uses the selected weapon’s chart in map spaces or tabletop inches. Each map space / tabletop inch represents six feet. Choose the applicable band; targets beyond the listed extreme range are out of range.</p><p><b>Situational modifiers</b> are cumulative. Check the weapon-at-rest restriction, referee decisions about protective cover, and which bonuses apply to your attack. Shotgun and scatter-gun accuracy bonuses are included automatically. After a hit, Roll wounds resolves location, severity, and shotgun or scatter-gun wound counts. Apply the results to the target.</p><p className="reference-note">Checked against the local 2e rulebook: ability tables p. 5, base numbers pp. 6–7, weapons p. 8, combat modifiers p. 9, wounds p. 10. No automatic misses, critical hits, or extra house rules are added.</p><button className="roll-button" onClick={() => setDialog(null)}>Back to the tabletop<ArrowRight size={16}/></button></div></Dialog>}
+    {dialog === 'rules' && <Dialog title="A little rules refresher" onClose={() => setDialog(null)}><div className="rules-content"><span className="eyebrow">BOOT HILL · SECOND EDITION</span><h3>Fast hands. Straight shooting.</h3><p><b>First shot</b> = speed ability modifier + bravery speed modifier + weapon speed modifier + situational speed modifiers. Higher scores shoot first; ties fire simultaneously. This score is not rolled.</p><p><b>Hit determination</b> = 50 + gun or throwing accuracy modifier + bravery accuracy modifier + experience modifier + range and situational modifiers. Roll d100: a result at or below that threshold hits.</p><p><b>Sheet scores</b> are the final percentile scores on your character sheet, including any creation or survival adjustments. Experience uses your previous number of gunfights. You can also enter your sheet’s modifiers directly. Each input mode keeps its own values; switching to Modifiers converts your current scores.</p><p><b>Range</b> uses the selected weapon’s chart in map spaces or tabletop inches. Each map space / tabletop inch represents six feet. Choose the applicable band; targets beyond the listed extreme range are out of range.</p><p><b>Situational modifiers</b> are cumulative. Check the weapon-at-rest restriction, referee decisions about protective cover, and which bonuses apply to your attack. Shotgun and scatter-gun accuracy bonuses are included automatically. After a hit, Roll wounds resolves location, severity, and shotgun or scatter-gun wound counts. Apply the results to the target.</p><p><b>Brawling</b> follows shooting, with two rounds per turn. Add two d10s and the current roll modifier, then use the punching or grappling chart. Results can reduce Strength and modify the next round. In the intervening shooting phase, each point of the previous brawl modifier changes hit chance by 10%.</p><p><b>Holds and Strength</b>: escape on an adjusted grapple of 3 or less, or 15–16, without causing damage. Other grapple results have no effect while held. Bear hugs prevent punching. Existing holds continue without another roll until escaped, released, or replaced by another action. Zero Strength means unconscious; a mortal wound is immediately fatal. The referee handles later death from untreated wounds using Adjust.</p><p><b>Shootout tracker</b>: add characters with their Strength ratings, select who acts and their target, and apply each result before advancing the brawling round. Wounds, holds, and turn progress are saved on this device. Saved character sheets are updated only with Save sheet.</p><p className="reference-note">Checked against the local 2e rulebook: ability tables p. 5, base numbers pp. 6–7, weapons p. 8, combat modifiers p. 9, wounds p. 10, brawling pp. 10–11. No automatic misses, critical hits, or extra house rules are added.</p><button className="roll-button" onClick={() => setDialog(null)}>Back to the tabletop<ArrowRight size={16}/></button></div></Dialog>}
     {dialog === 'new' && <Dialog title="A new face in town" onClose={() => setDialog(null)}><form className="new-character-form" onSubmit={event => { event.preventDefault(); startCharacter({ name: newName.trim() || 'Unnamed gunslinger', mode: 'modifiers', abilities: { speed: '20', gunAccuracy: '30', throwingAccuracy: '30', bravery: '25', gunfights: '0' }, modifiers: { ...initialSheet }, loadout: { ...sample.loadout } }); setToast('Your new sheet is ready. Fill it in, then Save sheet to keep it in your library.'); }}><p>Give your gunslinger a name, then fill in their character sheet. Save any changes to your current sheet before starting another.</p><label htmlFor="new-name">Character name<input id="new-name" autoFocus maxLength={80} placeholder="A name the West will remember" value={newName} onChange={event => setNewName(event.target.value)}/></label><button className="roll-button" type="submit">Create character<ArrowRight size={16}/></button><button className="example-button" type="button" onClick={() => startCharacter(sample)}>Use the Colorado Kid example</button></form></Dialog>}
   </>;
 }

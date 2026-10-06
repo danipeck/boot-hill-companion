@@ -28,6 +28,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { margin: 0; min-width: 320px; }
 button, input, select { font: inherit; }
 button, a, input, select { -webkit-tap-highlight-color: transparent; }
@@ -68,6 +69,64 @@ h1 { margin-top: 13px; font-size: clamp(28px, 3vw, 38px); font-weight: 400; lett
 .card { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 3px 12px #49371f04; overflow: hidden; }
 .character-card { padding: 24px; }
 .combat-column { display: flex; min-width: 0; flex-direction: column; gap: 20px; }
+.shooting-panels { display: flex; flex-direction: column; gap: 20px; }
+.encounter-card, .brawl-card { padding: 24px; }
+.turn-label { color: var(--gold); letter-spacing: 1px; font-size: .875rem; font-weight: 600; }
+.phase-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
+.phase-steps { display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 0; list-style: none; }
+.phase-steps li { padding: 7px 9px; border: 1px solid var(--line); border-radius: 5px; font-size: .875rem; color: var(--muted); }
+.phase-steps .current { color: var(--green); border-color: var(--green); font-weight: 600; background: color-mix(in srgb, var(--green) 7%, var(--paper)); }
+.panel-hint { margin-top: 14px; color: var(--muted); font-size: .875rem; line-height: 1.6; }
+.combatant-selectors, .brawl-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
+.combatant-selectors label, .brawl-fields > label, .add-combatant > label, .combatant-adjust > label, .shootout-shooting > label { display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: .875rem; }
+.combatant-selectors select, .brawl-fields input, .brawl-fields select, .add-combatant input, .add-combatant select { width: 100%; font-size: 1rem; }
+.automatic-target { display: flex; align-items: center; min-height: 46px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); font-size: 1rem; }
+.combatant-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 18px; }
+.combatant-row { min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 7px; }
+.combatant-summary { display: flex; flex-direction: column; gap: 5px; }
+.combatant-summary > div { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.combatant-summary strong { overflow-wrap: anywhere; font-size: 1rem; color: var(--green); }
+.strength-count { color: var(--muted); font-size: .875rem; font-variant-numeric: tabular-nums; }
+.strength-bar { height: 5px; border-radius: 3px; background: var(--line); margin: 10px 0 6px; overflow: hidden; }
+.strength-bar > span { display: block; height: 100%; background: var(--green); }
+.status-dead .combatant-summary strong { color: var(--muted); text-decoration: line-through; }
+.status-dead .strength-bar > span { background: var(--muted); }
+.combatant-meta { display: flex; justify-content: space-between; gap: 8px; align-items: center; flex-wrap: wrap; font-size: .75rem; color: var(--muted); }
+.combatant-meta > div { display: flex; align-items: center; gap: 9px; }
+.combatant-meta .text-button { font-size: .75rem; }
+.hold-label { margin-top: 10px; color: var(--gold); font-size: .875rem; }
+.tracked-wounds, .encounter-log { margin-top: 10px; color: var(--muted); font-size: .875rem; }
+.tracked-wounds summary, .encounter-log summary { cursor: pointer; padding: 5px 0; }
+.tracked-wounds p, .encounter-log p { padding: 8px 0; border-top: 1px solid var(--line); }
+.tracked-wounds small { display: block; margin-top: 4px; line-height: 1.6; }
+.encounter-tools { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 12px; }
+.add-combatant, .combatant-adjust { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.add-combatant > label { flex: 1 1 180px; }
+.add-combatant .panel-hint { width: 100%; margin-top: 0; }
+.combatant-adjust > label { flex: 1 1 100px; }
+.combatant-adjust input[type='number'] { width: 100%; }
+.checkbox-label { display: inline-flex !important; align-items: center; flex-direction: row !important; gap: 8px !important; font-size: .875rem; color: var(--muted); }
+.checkbox-label input { width: 17px; height: 17px; padding: 0; accent-color: var(--green); }
+.reset-shootout { margin-top: 12px; padding: 14px; background: var(--background); border: 1px solid var(--line); border-radius: 6px; font-size: .875rem; }
+.reset-shootout .export-button, .reset-shootout .text-button { display: inline-flex; margin: 10px 12px 0 0; }
+.combat-mode-tabs { display: flex; padding: 5px; gap: 5px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); }
+.combat-mode-tabs button { min-width: 0; flex: 1; padding: 11px 5px; border: 1px solid transparent; border-radius: 5px; background: transparent; font-size: 1rem; color: var(--muted); }
+.combat-mode-tabs .active { color: var(--green); border-color: var(--green); background: color-mix(in srgb, var(--green) 7%, var(--paper)); font-weight: 600; }
+.combat-mode-tabs button:hover { color: var(--green); }
+.arm-options { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+.brawl-chance { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 10px; margin-top: 22px; padding: 16px; border: 1px solid var(--line); border-radius: 7px; background: var(--background); color: var(--muted); font-size: 1rem; }
+.brawl-chance strong { color: var(--green); font-family: Georgia, serif; font-size: 2rem; font-weight: 400; }
+.brawl-chance .chance-bar { width: 100%; margin: 0; }
+.brawl-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 20px; }
+.latest-brawl { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
+.brawl-dice { color: var(--muted); font-size: 1rem; }
+.brawl-dice b { color: var(--green); }
+.brawl-result-name { display: block; margin-top: 9px; font-family: Georgia, serif; font-size: 1.5rem; font-weight: 400; color: var(--green); }
+.brawl-effects { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; font-size: .875rem; color: var(--muted); }
+.apply-result { margin-top: 14px; color: var(--green); border-color: var(--green); }
+.shootout-shooting { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; margin-top: 16px; }
+.shootout-shooting .panel-hint { margin-top: 0; flex: 1 1 220px; }
+.shootout-shooting select { padding: 7px 9px; }
 .loadout-card, .shot-card, .history-card { padding: 24px; }
 .section-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 .title-with-icon { display: flex; align-items: center; gap: 9px; color: var(--green); min-width: 0; }
@@ -82,6 +141,10 @@ h2 { font-size: 1.5rem; font-weight: 400; }
 .character-identity label, .weapon-field > label { display: block; color: var(--muted); font-size: .75rem; letter-spacing: 1px; margin-bottom: 7px; }
 .name-input { width: 100%; border: 0; border-bottom: 1px dashed #d8cebc; border-radius: 0; padding: 4px 0 7px; background: transparent; font-family: Georgia, 'Times New Roman', serif; font-size: 1.5rem; }
 .input-tabs { display: flex; padding: 4px; border: 1px solid var(--line); border-radius: 7px; background: #f5f2eb; }
+.sheet-loadout { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+.sheet-loadout label { color: var(--muted); font-size: .875rem; }
+.sheet-loadout select { width: 100%; font-size: 1rem; }
+.sheet-loadout p { color: var(--muted); font-size: .875rem; line-height: 1.6; }
 .input-tabs button { flex: 1; border: 0; border-radius: 4px; padding: 9px 5px; background: transparent; color: var(--muted); font-size: .875rem; }
 .input-tabs .active { color: var(--green); background: var(--paper); font-weight: 600; box-shadow: 0 1px 4px #302f2710; }
 .input-help { margin: 13px 0 16px; color: var(--muted); font-size: .875rem; line-height: 1.6; }
@@ -321,6 +384,8 @@ footer button:hover { color: var(--green); }
 [data-theme='dark'] .dialog::backdrop { background: #0d100bcc; }
 
 @media (max-width: 1000px) {
+  .encounter-card, .brawl-card { padding: 20px; }
+  .combatant-list { grid-template-columns: minmax(0, 1fr); }
   .header-inner, .page { padding-left: 24px; padding-right: 24px; }
   .header-inner { gap: 16px; }
   .theme-toggle { width: 40px; padding: 9px; }
@@ -352,6 +417,9 @@ footer button:hover { color: var(--green); }
 }
 
 @media (max-width: 480px) {
+  .encounter-card, .brawl-card { padding: 18px; }
+  .combatant-selectors, .brawl-fields { grid-template-columns: minmax(0, 1fr); }
+  .phase-row > .export-button, .brawl-actions > .roll-button { width: 100%; justify-content: center; }
   .header-inner, .page { padding-left: 16px; padding-right: 16px; }
   .brand > span { font-size: 1.5rem; letter-spacing: 2px; }
   h1 { font-size: 29px; }

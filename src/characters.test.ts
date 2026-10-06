@@ -78,6 +78,15 @@ test('imports old exports, BOM-prefixed JSON, and numeric stat fields', () => {
   assert.equal(parseCharacter(numeric).abilities.speed, '96');
 });
 
+test('optional Strength ratings round-trip without breaking older character exports', () => {
+  assert.equal(parseCharacter(legacyCharacter()).strength, undefined);
+  const character = { ...sample, strength: '15' };
+  assert.equal(importCharacter(initialLibrary(), exportCharacterJson(character), 'strong').draft.strength, '15');
+  assert.equal(parseCharacter({ ...sample, strength: 13 }).strength, '13');
+  assert.equal(parseCharacter({ ...sample, strength: '' }).strength, '');
+  for (const strength of ['0', '100', '1.5', 'bad']) assert.throws(() => parseCharacter({ ...sample, strength }), /Strength/);
+});
+
 test('same-name imports add separate entries instead of overwriting characters', () => {
   const original = initialLibrary();
   const json = exportCharacterJson(sample);

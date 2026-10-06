@@ -72,6 +72,11 @@ const accuracyTable = [[5, -9], [15, -6], [25, -3], [35, 0], [50, 2], [65, 5], [
 const braveryTable = [[10, -4, -6], [20, -2, -3], [35, 0, 0], [65, 1, 3], [80, 2, 6], [90, 3, 10], [98, 4, 15], [100, 5, 15]];
 const experienceTable = [-10, -5, -5, 0, 0, 2, 2, 6, 6, 8, 8, 10];
 
+export function speedAbilityModifier(score: number): number {
+  if (!Number.isInteger(score) || score < 1 || score > 100) throw new Error('Speed scores must be whole numbers from 1 to 100.');
+  return speedTable.find(row => score <= row[0])![1];
+}
+
 export function abilityModifiers(form: AbilityForm, weaponSpeed: number): Sheet {
   const scores = {} as Record<keyof AbilityForm, number>;
   for (const key of ['speed', 'gunAccuracy', 'throwingAccuracy', 'bravery', 'gunfights'] as const) {
@@ -85,7 +90,7 @@ export function abilityModifiers(form: AbilityForm, weaponSpeed: number): Sheet 
   }
   const bravery = braveryTable.find(row => scores.bravery <= row[0])!;
   return {
-    speed: speedTable.find(row => scores.speed <= row[0])![1],
+    speed: speedAbilityModifier(scores.speed),
     gunAccuracy: accuracyTable.find(row => scores.gunAccuracy <= row[0])![1],
     throwingAccuracy: accuracyTable.find(row => scores.throwingAccuracy <= row[0])![1],
     braverySpeed: bravery[1], braveryAccuracy: bravery[2],

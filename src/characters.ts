@@ -2,6 +2,7 @@ import { abilityModifiers, initialSheet, parseSheet, statKeys, weaponProfiles, w
 
 export type Character = {
   name: string;
+  strength?: string;
   mode: 'scores' | 'modifiers';
   abilities: AbilityForm;
   modifiers: SheetForm;
@@ -52,6 +53,12 @@ export function parseCharacter(value: unknown, validateStats = true): Character 
     loadout = { weaponId, customSpeed };
   }
   const character: Character = { name: value.name, mode: value.mode as Character['mode'], abilities, modifiers, loadout };
+  if (value.strength !== undefined) {
+    character.strength = field(value.strength, 'Strength');
+    if (validateStats && character.strength.trim() !== '' && (!Number.isInteger(Number(character.strength)) || Number(character.strength) < 1 || Number(character.strength) > 99)) {
+      throw new Error('Strength must be a whole-number rating from 1 to 99, or left blank.');
+    }
+  }
   if (validateStats) {
     const weapon = weaponProfiles.find(item => item.id === loadout.weaponId)!;
     const speed = weapon.ranges ? weapon.speed : Number(loadout.customSpeed);
