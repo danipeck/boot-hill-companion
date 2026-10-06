@@ -103,6 +103,12 @@ h1 { margin-top: 13px; font-size: clamp(28px, 3vw, 38px); font-weight: 400; lett
 .add-combatant, .combatant-adjust { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
 .add-combatant > label { flex: 1 1 180px; }
 .add-combatant .panel-hint { width: 100%; margin-top: 0; }
+.extra-preview { flex-basis: 100%; padding: 14px; border: 1px solid var(--line); border-radius: 8px; }
+.extra-preview > strong { font-size: 1rem; }
+.extra-preview dl { display: flex; flex-wrap: wrap; gap: 12px 24px; margin: 12px 0; }
+.extra-preview dt, .extra-preview p, .extra-reference { color: var(--muted); font-size: .875rem; line-height: 1.6; }
+.extra-preview dd { margin: 0; font-size: 1.125rem; font-weight: 600; }
+.extra-reference { margin-top: 8px; }
 .combatant-adjust > label { flex: 1 1 100px; }
 .combatant-adjust input[type='number'] { width: 100%; }
 .checkbox-label { display: inline-flex !important; align-items: center; flex-direction: row !important; gap: 8px !important; font-size: .875rem; color: var(--muted); }

@@ -87,6 +87,15 @@ test('optional Strength ratings round-trip without breaking older character expo
   for (const strength of ['0', '100', '1.5', 'bad']) assert.throws(() => parseCharacter({ ...sample, strength }), /Strength/);
 });
 
+test('optional Morale percentages round-trip and reject invalid imported values', () => {
+  assert.equal(parseCharacter(sample).morale, undefined);
+  const character = { ...sample, morale: '91' };
+  assert.equal(importCharacter(initialLibrary(), exportCharacterJson(character), 'morale').draft.morale, '91');
+  assert.equal(parseCharacter({ ...sample, morale: 0 }).morale, '0');
+  assert.equal(parseCharacter({ ...sample, morale: '' }).morale, '');
+  for (const morale of ['-1', '101', '1.5', 'bad']) assert.throws(() => parseCharacter({ ...sample, morale }), /Morale/);
+});
+
 test('same-name imports add separate entries instead of overwriting characters', () => {
   const original = initialLibrary();
   const json = exportCharacterJson(sample);

@@ -1,8 +1,10 @@
 import { abilityModifiers, initialSheet, parseSheet, statKeys, weaponProfiles, weapons, type AbilityForm, type SheetForm } from './rules';
+import { upgradeLegacyExtra } from './extras';
 
 export type Character = {
   name: string;
   strength?: string;
+  morale?: string;
   mode: 'scores' | 'modifiers';
   abilities: AbilityForm;
   modifiers: SheetForm;
@@ -52,18 +54,25 @@ export function parseCharacter(value: unknown, validateStats = true): Character 
     if (customSpeed.trim() === '' || !weapons.some(weapon => weapon.value === Number(customSpeed))) throw new Error('Choose a valid weapon speed.');
     loadout = { weaponId, customSpeed };
   }
-  const character: Character = { name: value.name, mode: value.mode as Character['mode'], abilities, modifiers, loadout };
+  let character: Character = { name: value.name, mode: value.mode as Character['mode'], abilities, modifiers, loadout };
   if (value.strength !== undefined) {
     character.strength = field(value.strength, 'Strength');
     if (validateStats && character.strength.trim() !== '' && (!Number.isInteger(Number(character.strength)) || Number(character.strength) < 1 || Number(character.strength) > 99)) {
       throw new Error('Strength must be a whole-number rating from 1 to 99, or left blank.');
     }
   }
+  if (value.morale !== undefined) {
+    character.morale = field(value.morale, 'Morale');
+    if (validateStats && character.morale.trim() !== '' && (!Number.isInteger(Number(character.morale)) || Number(character.morale) < 0 || Number(character.morale) > 100)) {
+      throw new Error('Morale must be a whole-number percentage from 0 to 100, or left blank.');
+    }
+  }
+  character = upgradeLegacyExtra(character);
   if (validateStats) {
     const weapon = weaponProfiles.find(item => item.id === loadout.weaponId)!;
     const speed = weapon.ranges ? weapon.speed : Number(loadout.customSpeed);
-    if (character.mode === 'scores') abilityModifiers(abilities, speed);
-    else parseSheet({ ...modifiers, weaponSpeed: String(speed) });
+    if (character.mode === 'scores') abilityModifiers(character.abilities, speed);
+    else parseSheet({ ...character.modifiers, weaponSpeed: String(speed) });
   }
   return character;
 }

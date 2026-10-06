@@ -71,6 +71,24 @@ const speedTable = [[5, -5], [10, -2], [20, 0], [35, 2], [50, 4], [65, 6], [80, 
 const accuracyTable = [[5, -9], [15, -6], [25, -3], [35, 0], [50, 2], [65, 5], [75, 7], [85, 10], [95, 15], [98, 18], [100, 20]];
 const braveryTable = [[10, -4, -6], [20, -2, -3], [35, 0, 0], [65, 1, 3], [80, 2, 6], [90, 3, 10], [98, 4, 15], [100, 5, 15]];
 const experienceTable = [-10, -5, -5, 0, 0, 2, 2, 6, 6, 8, 8, 10];
+const strengthTable = [[2, 8], [5, 9], [10, 10], [17, 11], [25, 12], [40, 13], [60, 14], [75, 15], [83, 16], [90, 17], [95, 18], [98, 19], [100, 20]];
+const startingExperienceTable = [[40, 0], [60, 1], [75, 2], [85, 3], [90, 4], [93, 5], [95, 6], [96, 7], [97, 8], [98, 9], [99, 10], [100, 11]];
+
+// Character creation, p. 5: Strength is a rating; Experience is a gunfight
+// count. NPCs use the ordinary rolls, without the player-only initial boosts.
+export function strengthFromScore(score: number): number {
+  if (!Number.isInteger(score) || score < 1 || score > 100) throw new Error('Strength rolls must be whole numbers from 1 to 100.');
+  return strengthTable.find(row => score <= row[0])![1];
+}
+export function gunfightsFromRoll(roll: number): number {
+  if (!Number.isInteger(roll) || roll < 1 || roll > 100) throw new Error('Experience rolls must be whole numbers from 1 to 100.');
+  return startingExperienceTable.find(row => roll <= row[0])![1];
+}
+
+export function experienceModifier(gunfights: number): number {
+  if (!Number.isInteger(gunfights) || gunfights < 0 || gunfights > 999) throw new Error('Gunfights must be a whole number from 0 to 999.');
+  return experienceTable[Math.min(gunfights, 11)];
+}
 
 export function speedAbilityModifier(score: number): number {
   if (!Number.isInteger(score) || score < 1 || score > 100) throw new Error('Speed scores must be whole numbers from 1 to 100.');
@@ -94,7 +112,7 @@ export function abilityModifiers(form: AbilityForm, weaponSpeed: number): Sheet 
     gunAccuracy: accuracyTable.find(row => scores.gunAccuracy <= row[0])![1],
     throwingAccuracy: accuracyTable.find(row => scores.throwingAccuracy <= row[0])![1],
     braverySpeed: bravery[1], braveryAccuracy: bravery[2],
-    experience: experienceTable[Math.min(scores.gunfights, 11)], weaponSpeed,
+    experience: experienceModifier(scores.gunfights), weaponSpeed,
   };
 }
 
@@ -108,6 +126,7 @@ export const weaponProfiles: WeaponProfile[] = [
   { id: 'cap-ball', name: 'Cap & ball revolver', attack: 'gun', speed: 0, bonus: 0, ranges: [3, 7, 12, 26] },
   { id: 'derringer', name: 'Derringer', attack: 'gun', speed: 5, bonus: 0, ranges: [1, 3, 6, 10] },
   { id: 'rifle', name: 'Repeating rifle', attack: 'gun', speed: -5, bonus: 0, ranges: [20, 40, 80, 200] },
+  { id: 'carbine', name: 'Repeating carbine', attack: 'gun', speed: -5, bonus: 0, ranges: [10, 20, 40, 100] },
   { id: 'buffalo', name: 'Buffalo rifle', attack: 'gun', speed: -10, bonus: 0, ranges: [30, 60, 120, 300] },
   { id: 'shotgun', name: 'Shotgun', attack: 'gun', speed: -5, bonus: 10, ranges: [6, 12, 18, 36] },
   { id: 'scatter', name: 'Scatter gun', attack: 'gun', speed: 0, bonus: 20, ranges: [2, 4, 8, 15] },
