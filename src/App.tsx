@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
-import { ArrowDownToLine, ArrowRight, BookOpen, Check, ChevronDown, CircleHelp, Crosshair, Dice5, FolderOpen, History, Moon, Plus, RotateCcw, Save, Settings2, Shield, Sparkles, Star, Sun, Target, Trash2, Upload, UserRound, X, Zap } from 'lucide-react';
-import { abilityModifiers, calculate, conditions, experienceModifier, initialSheet, parseSheet, probability, ranges, resolveHit, rollPercentile, shooterMovement, signed, targetMovement, weaponProfiles, weapons, type AbilityForm, type SheetForm, type StatKey } from './rules';
-import { exportCharacterJson, importCharacter, loadSaved, readCharacterFile, readLibrary, removeSaved, sample, saveDraft, writeLibrary, type Character, type CharacterLibrary } from './characters';
+import { ArrowDownToLine, ArrowRight, BookOpen, Check, ChevronDown, Crosshair, Dice5, FolderOpen, History, Moon, Plus, RotateCcw, Save, Settings2, Sparkles, Sun, Trash2, Upload, UserRound, X, Zap } from 'lucide-react';
+import { abilityModifiers, calculate, conditions, parseSheet, probability, ranges, resolveHit, rollPercentile, shooterMovement, signed, targetMovement, weaponProfiles, weapons } from './rules';
+import { blankCharacter, normalizeCharacter, exportCharacterJson, importCharacter, loadSaved, readCharacterFile, readLibrary, removeSaved, sample, saveDraft, writeLibrary, type Character, type CharacterLibrary } from './characters';
 import WoundResult, { WoundDetails } from './WoundResult';
 import { hitEffectsSummary, rollHitEffects, type HitContext, type HitEffects } from './wounds';
 import EncounterPanel from './EncounterPanel';
+import CharacterStats from './CharacterStats';
 import BrawlPanel, { BrawlDetails, type BrawlRoll } from './BrawlPanel';
 import { continueHold, rollBrawl, type BrawlOptions, type CombatMode } from './brawling';
 import { advancePhase, applyBrawl, applyShotWounds, canAct, newEncounter, phaseNames, readEncounter, releaseHold, trackedShootingModifiers, updateActingSheet, withDefaultTarget, writeEncounter, type ActionContext, type Encounter } from './encounter';
 
-type InputMode = 'scores' | 'modifiers';
 type Roll = HitContext & { kind: 'shot'; order: number; id: string; roll: number; chance: number; weapon: string; character: string; range: string; firstShot: number; time: string; woundResult?: HitEffects; context?: ActionContext; targetName: string };
 
 function BadgeStar({ className = '' }: { className?: string }) {
@@ -31,22 +31,6 @@ function Dialog({ title, children, onClose }: { title: string; children: ReactNo
     <div className="dialog-header"><h2 id="dialog-title">{title}</h2><button className="icon-button" onClick={onClose} aria-label="Close dialog"><X size={20}/></button></div>{children}
   </dialog>;
 }
-
-const scoreFields: { key: keyof AbilityForm; label: string; hint: string; icon: typeof Zap }[] = [
-  { key: 'speed', label: 'Speed', hint: 'Final sheet score', icon: Zap },
-  { key: 'gunAccuracy', label: 'Gun accuracy', hint: 'Final sheet score', icon: Crosshair },
-  { key: 'throwingAccuracy', label: 'Throwing accuracy', hint: 'Final sheet score', icon: Target },
-  { key: 'bravery', label: 'Bravery', hint: 'Final sheet score', icon: Shield },
-  { key: 'gunfights', label: 'Experience', hint: 'Previous gunfights', icon: Star },
-];
-const modifierFields: { key: StatKey; label: string; hint: string; icon: typeof Zap }[] = [
-  { key: 'speed', label: 'Speed', hint: 'Speed ability modifier', icon: Zap },
-  { key: 'braverySpeed', label: 'Bravery · speed', hint: 'Bravery speed modifier', icon: Shield },
-  { key: 'gunAccuracy', label: 'Gun accuracy', hint: 'Firearm accuracy modifier', icon: Crosshair },
-  { key: 'throwingAccuracy', label: 'Throwing accuracy', hint: 'Thrown / launched modifier', icon: Target },
-  { key: 'braveryAccuracy', label: 'Bravery · accuracy', hint: 'Bravery accuracy modifier', icon: Shield },
-  { key: 'experience', label: 'Experience', hint: 'Experience accuracy modifier', icon: Star },
-];
 
 export default function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
@@ -93,7 +77,7 @@ export default function App() {
   libraryRef.current = library;
 
   function setCharacter(next: Character | ((current: Character) => Character)) {
-    const draft = typeof next === 'function' ? next(character) : next;
+    const draft = normalizeCharacter(typeof next === 'function' ? next(character) : next);
     setLibrary(current => ({ ...current, draft }));
     if (actor) setEncounter(current => updateActingSheet(current, draft));
   }
@@ -229,17 +213,6 @@ export default function App() {
   const shootingBlocked = encounter.members.length > 0 ? encounter.phase !== 'shooting' ? 'Advance to the shooting phase to fire.' : !actor ? 'Choose an acting character above, or remove the roster to roll freely.' : !canAct(actor) ? 'An unconscious or dead character cannot act.' : actor.hold?.kind === 'bear-hug' ? 'A bear hug prevents shooting; grapple to escape.' : actor.hold?.kind === `${gunHand}-arm` ? 'Your gun arm is held. Switch hands or escape the hold.' : '' : '';
   const hasModifiers = selected.length > 0 || [movementIndex, targetIndex, woundPenalty, Number(shot), Number(surprise), Number(aiming), armPenalty, brawlHitModifier, Number(speedExtra), Number(accuracyExtra)].some(value => value !== 0);
 
-  function switchMode(mode: InputMode) {
-    setCharacter(current => {
-      if (mode === 'modifiers' && current.mode === 'scores') {
-        try {
-          const converted = abilityModifiers(current.abilities, speed);
-          return { ...current, mode, modifiers: { name: current.name, ...Object.fromEntries(Object.entries(converted).map(([key, value]) => [key, String(value)])) } as SheetForm };
-        } catch { return { ...current, mode }; }
-      }
-      return { ...current, mode };
-    });
-  }
   function resetConditions() {
     setSelectedConditions([]); setMovementIndex(0); setTargetIndex(0); setWound('0'); setShot('0'); setSurprise('0'); setAiming('0'); setGunArm('0'); setSpeedExtra('0'); setAccuracyExtra('0');
   }
@@ -358,17 +331,7 @@ export default function App() {
             {!weapon.ranges && <><label htmlFor="preferred-weapon-speed">Weapon speed class</label><select id="preferred-weapon-speed" value={customSpeed} onChange={event => setCustomSpeed(event.target.value)}>{weapons.map(item => <option key={item.value} value={item.value}>{item.label} ({signed(item.value)})</option>)}</select></>}
             <p>Changes in combat are remembered for this shootout. Save sheet to keep the choice in your library.</p>
           </div>
-          <div className="input-tabs" aria-label="Character input mode"><button className={character.mode === 'scores' ? 'active' : ''} onClick={() => switchMode('scores')}>Sheet scores</button><button className={character.mode === 'modifiers' ? 'active' : ''} onClick={() => switchMode('modifiers')}>Modifiers</button></div>
-          <p className="input-help">{character.mode === 'scores' ? 'Enter your final sheet scores. We’ll find the modifiers.' : 'Enter the signed modifiers from your character sheet.'}</p>
-          <div className="stat-fields">
-            <div className="stat-row"><Shield size={17}/><label htmlFor="strength-rating">Strength<small>Rating, usually 8–20</small></label><input id="strength-rating" type="number" min="1" max="99" step="1" placeholder="—" value={character.strength || ''} onChange={event => setCharacter({ ...character, strength: event.target.value })}/></div>
-            {character.morale !== undefined && <>
-              {character.mode === 'modifiers' && <div className="stat-row"><Shield size={17}/><label htmlFor="morale-score">Morale<small>Percentage · reference only</small></label><input id="morale-score" type="number" min="0" max="100" step="1" value={character.morale} onChange={event => setCharacter({ ...character, morale: event.target.value })}/></div>}
-              {character.mode === 'modifiers' && <div className="stat-row"><Star size={17}/><label htmlFor="extra-experience">Gunfights<small>Updates experience modifier</small></label><input id="extra-experience" type="number" min="0" max="999" step="1" value={character.abilities.gunfights} onChange={event => { const value = event.target.value; let experience = character.modifiers.experience; try { if (value.trim()) experience = String(experienceModifier(Number(value))); } catch { /* Keep the last modifier while the count is unfinished. */ } setCharacter({ ...character, abilities: { ...character.abilities, gunfights: value }, modifiers: { ...character.modifiers, experience } }); }}/></div>}
-            </>}
-            {character.mode === 'scores' ? scoreFields.map(field => { const Icon = field.icon; return <div className="stat-row" key={field.key}><Icon size={17}/><label htmlFor={`score-${field.key}`}>{field.label}<small>{field.key === 'bravery' && character.morale !== undefined ? 'Also used for NPC morale' : field.hint}</small></label><input id={`score-${field.key}`} type="number" min={field.key === 'gunfights' ? 0 : 1} max={field.key === 'gunfights' ? 999 : 100} step="1" value={character.abilities[field.key]} onChange={event => setCharacter({ ...character, ...(field.key === 'bravery' && character.morale !== undefined ? { morale: event.target.value } : {}), abilities: { ...character.abilities, [field.key]: event.target.value } })}/></div>; }) : modifierFields.map(field => { const Icon = field.icon; return <div className="stat-row" key={field.key}><Icon size={17}/><label htmlFor={`mod-${field.key}`}>{field.label}<small>{field.hint}</small></label><input id={`mod-${field.key}`} type="number" min="-100" max="100" step="1" value={character.modifiers[field.key]} onChange={event => setCharacter({ ...character, modifiers: { ...character.modifiers, [field.key]: event.target.value } })}/></div>; })}
-          </div>
-          <div className="sheet-footnote"><CircleHelp size={15}/><span>{character.mode === 'scores' ? 'Use 100 for 00. Include any creation or survival improvements already on your sheet.' : 'Positive bonuses and negative penalties both work. Weapon speed is set in your loadout.'}</span></div>
+          <CharacterStats character={character} onChange={setCharacter}/>
           <div className="character-bottom">
             <div className="character-actions">
               <button type="button" className="export-button save-sheet-button" onClick={saveSheet}><Save size={14}/> Save sheet</button>
@@ -439,7 +402,7 @@ export default function App() {
       <footer><span><BadgeStar/> An unofficial companion for Boot Hill, 2nd Edition.</span></footer>
     </main>
     {toast && <div className="toast" role="status"><Check size={17}/>{toast}</div>}
-    {dialog === 'rules' && <Dialog title="A little rules refresher" onClose={() => setDialog(null)}><div className="rules-content"><span className="eyebrow">BOOT HILL · SECOND EDITION</span><h3>Fast hands. Straight shooting.</h3><p><b>First shot</b> = speed ability modifier + bravery speed modifier + weapon speed modifier + situational speed modifiers. Higher scores shoot first; ties fire simultaneously. This score is not rolled.</p><p><b>Hit determination</b> = 50 + gun or throwing accuracy modifier + bravery accuracy modifier + experience modifier + range and situational modifiers. Roll d100: a result at or below that threshold hits.</p><p><b>Sheet scores</b> are the final percentile scores on your character sheet, including any creation or survival adjustments. Experience uses your previous number of gunfights. You can also enter your sheet’s modifiers directly. Each input mode keeps its own values; switching to Modifiers converts your current scores.</p><p><b>Range</b> uses the selected weapon’s chart in map spaces or tabletop inches. Each map space / tabletop inch represents six feet. Choose the applicable band; targets beyond the listed extreme range are out of range.</p><p><b>Situational modifiers</b> are cumulative. Check the weapon-at-rest restriction, referee decisions about protective cover, and which bonuses apply to your attack. Shotgun and scatter-gun accuracy bonuses are included automatically. After a hit, Roll wounds resolves location, severity, and shotgun or scatter-gun wound counts. Apply the results to the target.</p><p><b>Brawling</b> follows shooting, with two rounds per turn. Add two d10s and the current roll modifier, then use the punching or grappling chart. Results can reduce Strength and modify the next round. In the intervening shooting phase, each point of the previous brawl modifier changes hit chance by 10%.</p><p><b>Holds and Strength</b>: escape on an adjusted grapple of 3 or less, or 15–16, without causing damage. Other grapple results have no effect while held. Bear hugs prevent punching. Existing holds continue without another roll until escaped, released, or replaced by another action. Zero Strength means unconscious; a mortal wound is immediately fatal. The referee handles later death from untreated wounds using Adjust.</p><p><b>Shootout tracker</b>: add characters with their Strength ratings, select who acts and their target, and apply each result before advancing the brawling round. Wounds, holds, and turn progress are saved on this device. Saved character sheets are updated only with Save sheet.</p><p className="reference-note">Checked against the local 2e rulebook: ability tables p. 5, base numbers pp. 6–7, weapons p. 8, combat modifiers p. 9, wounds p. 10, brawling pp. 10–11. No automatic misses, critical hits, or extra house rules are added.</p><button className="roll-button" onClick={() => setDialog(null)}>Back to the tabletop<ArrowRight size={16}/></button></div></Dialog>}
-    {dialog === 'new' && <Dialog title="A new face in town" onClose={() => setDialog(null)}><form className="new-character-form" onSubmit={event => { event.preventDefault(); startCharacter({ name: newName.trim() || 'Unnamed gunslinger', mode: 'modifiers', abilities: { speed: '20', gunAccuracy: '30', throwingAccuracy: '30', bravery: '25', gunfights: '0' }, modifiers: { ...initialSheet }, loadout: { ...sample.loadout } }); setToast('Your new sheet is ready. Fill it in, then Save sheet to keep it in your library.'); }}><p>Give your gunslinger a name, then fill in their character sheet. Save any changes to your current sheet before starting another.</p><label htmlFor="new-name">Character name<input id="new-name" autoFocus maxLength={80} placeholder="A name the West will remember" value={newName} onChange={event => setNewName(event.target.value)}/></label><button className="roll-button" type="submit">Create character<ArrowRight size={16}/></button><button className="example-button" type="button" onClick={() => startCharacter(sample)}>Use the Colorado Kid example</button></form></Dialog>}
+    {dialog === 'rules' && <Dialog title="A little rules refresher" onClose={() => setDialog(null)}><div className="rules-content"><span className="eyebrow">BOOT HILL · SECOND EDITION</span><h3>Fast hands. Straight shooting.</h3><p><b>First shot</b> = speed ability modifier + bravery speed modifier + weapon speed modifier + situational speed modifiers. Higher scores shoot first; ties fire simultaneously. This score is not rolled.</p><p><b>Hit determination</b> = 50 + gun or throwing accuracy modifier + bravery accuracy modifier + experience modifier + range and situational modifiers. Roll d100: a result at or below that threshold hits.</p><p><b>Percentile rolls</b> determine all six stats using the ability tables. Speed, gun accuracy, throwing accuracy, Strength, Bravery and Experience show their derived values below their rolls. Strength becomes a rating; Experience becomes a number of previous gunfights and an accuracy modifier. Use 100 or 00 for a roll of 100. Enter final percentile scores after any creation or survival adjustments. Older sheets retain their recorded ratings until their original rolls are supplied.</p><p><b>Range</b> uses the selected weapon’s chart in map spaces or tabletop inches. Each map space / tabletop inch represents six feet. Choose the applicable band; targets beyond the listed extreme range are out of range.</p><p><b>Situational modifiers</b> are cumulative. Check the weapon-at-rest restriction, referee decisions about protective cover, and which bonuses apply to your attack. Shotgun and scatter-gun accuracy bonuses are included automatically. After a hit, Roll wounds resolves location, severity, and shotgun or scatter-gun wound counts. Apply the results to the target.</p><p><b>Brawling</b> follows shooting, with two rounds per turn. Add two d10s and the current roll modifier, then use the punching or grappling chart. Results can reduce Strength and modify the next round. In the intervening shooting phase, each point of the previous brawl modifier changes hit chance by 10%.</p><p><b>Holds and Strength</b>: escape on an adjusted grapple of 3 or less, or 15–16, without causing damage. Other grapple results have no effect while held. Bear hugs prevent punching. Existing holds continue without another roll until escaped, released, or replaced by another action. Zero Strength means unconscious; a mortal wound is immediately fatal. The referee handles later death from untreated wounds using Adjust.</p><p><b>Shootout tracker</b>: add characters with their Strength ratings, select who acts and their target, and apply each result before advancing the brawling round. Wounds, holds, and turn progress are saved on this device. Saved character sheets are updated only with Save sheet.</p><p className="reference-note">Checked against the local 2e rulebook: ability tables p. 5, base numbers pp. 6–7, weapons p. 8, combat modifiers p. 9, wounds p. 10, brawling pp. 10–11. No automatic misses, critical hits, or extra house rules are added.</p><button className="roll-button" onClick={() => setDialog(null)}>Back to the tabletop<ArrowRight size={16}/></button></div></Dialog>}
+    {dialog === 'new' && <Dialog title="A new face in town" onClose={() => setDialog(null)}><form className="new-character-form" onSubmit={event => { event.preventDefault(); startCharacter(blankCharacter(newName.trim() || 'Unnamed gunslinger')); setToast('Your new sheet is ready. Fill it in, then Save sheet to keep it in your library.'); }}><p>Give your gunslinger a name, then fill in their character sheet. Save any changes to your current sheet before starting another.</p><label htmlFor="new-name">Character name<input id="new-name" autoFocus maxLength={80} placeholder="A name the West will remember" value={newName} onChange={event => setNewName(event.target.value)}/></label><button className="roll-button" type="submit">Create character<ArrowRight size={16}/></button><button className="example-button" type="button" onClick={() => startCharacter(sample)}>Use the Colorado Kid example</button></form></Dialog>}
   </>;
 }

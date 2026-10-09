@@ -1,5 +1,5 @@
 import { type Character } from './characters';
-import { abilityModifiers, experienceModifier, gunfightsFromRoll, rollPercentile, strengthFromScore, weaponProfiles, type AbilityForm, type SheetForm } from './rules';
+import { abilityModifiers, experienceModifier, gunfightsFromRoll, presetExperienceRoll, presetStrengthRoll, rollPercentile, strengthFromScore, weaponProfiles, type AbilityForm, type SheetForm } from './rules';
 
 type RawAbilities = { speed: number; gunAccuracy: number; throwingAccuracy: number; bravery: number };
 export type ExtraPreset = {
@@ -33,10 +33,10 @@ export const extraPresets: readonly ExtraPreset[] = [
   { id: 'town-marshal', name: 'Town Marshal', weaponId: 'fast-draw', strength: 15, experience: 4, abilities: { speed: 85, gunAccuracy: 85, throwingAccuracy: 60, bravery: 87 } },
 ];
 
-function sheetFromScores(name: string, strength: number, abilities: AbilityForm, weaponId: string): Character {
+function sheetFromScores(name: string, strength: number, abilities: AbilityForm, weaponId: string, percentiles = { strength: String(presetStrengthRoll(strength)), experience: String(presetExperienceRoll(Number(abilities.gunfights))) }): Character {
   const modifiers = abilityModifiers(abilities, 0);
   return {
-    name, strength: String(strength), morale: abilities.bravery, mode: 'scores', abilities,
+    name, strength: String(strength), morale: abilities.bravery, mode: 'scores', abilities, percentiles,
     modifiers: { name, ...Object.fromEntries(Object.entries(modifiers).map(([key, value]) => [key, String(value)])) } as SheetForm,
     loadout: { weaponId, customSpeed: '5' },
   };
@@ -61,7 +61,7 @@ export function generateExtra(name?: string, roll: () => number = rollPercentile
   return sheetFromScores(name?.trim() || 'The stranger', strengthFromScore(strength), {
     speed: String(speed), gunAccuracy: String(gunAccuracy), throwingAccuracy: String(throwingAccuracy),
     bravery: String(bravery), gunfights: String(gunfightsFromRoll(experience)),
-  }, 'double-action');
+  }, 'double-action', { strength: String(strength), experience: String(experience) });
 }
 
 // Recognize the former roster's blank-score sheets during loading, including

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ArrowRight, Dice5, Plus, RotateCcw, Trash2, Users } from 'lucide-react';
 import { holdNames } from './brawling';
-import { type Character, type SavedCharacter } from './characters';
+import { normalizeCharacter, setPercentileRoll, type Character, type SavedCharacter } from './characters';
 import { addCombatant, adjustCombatant, combatantsBySpeed, combatantSpeed, combatantStatus, phaseNames, remainingStrength, removeCombatant, undoEncounter, type Encounter } from './encounter';
 import { signed, weaponProfiles, weapons } from './rules';
 import { createExtra, extraPresets, generateExtra } from './extras';
@@ -31,7 +31,7 @@ export function ExtraPreview({ sheet }: { sheet: Character }) {
 export default function EncounterPanel({ encounter, current, saved, activeId, error, storageError, onChange, onError, onAdvance, onReset, onActor, onTarget }: Props) {
   const [adding, setAdding] = useState(false);
   const [choice, setChoice] = useState('current');
-  const [rating, setRating] = useState<string | null>(null);
+  const [strengthRoll, setStrengthRoll] = useState<string | null>(null);
   const [extraName, setExtraName] = useState('');
   const [presetId, setPresetId] = useState('');
   const [extraDraft, setExtraDraft] = useState<Character | null>(null);
@@ -41,6 +41,7 @@ export default function EncounterPanel({ encounter, current, saved, activeId, er
   const [resetting, setResetting] = useState(false);
   const preset = extraPresets.find(item => item.id === presetId);
   const chosen = choice === 'extra' ? extraDraft : choice === 'current' ? current : saved.find(item => item.id === choice)?.character;
+  const prepared = chosen ? strengthRoll === null ? normalizeCharacter(chosen) : setPercentileRoll(chosen, 'strength', strengthRoll) : null;
   function ensureExtra() {
     if (!extraDraft) {
       setExtraDraft(generateExtra());
@@ -51,21 +52,21 @@ export default function EncounterPanel({ encounter, current, saved, activeId, er
     const next = id ? createExtra(id) : generateExtra();
     if (!extraName.trim() || extraName === preset?.name || extraName === 'The stranger') setExtraName(next.name);
     setExtraDraft(next);
-    setPresetId(id); setRating(null);
+    setPresetId(id); setStrengthRoll(null);
   }
   function rerollExtra() {
     const next = generateExtra(extraName);
     setExtraDraft({ ...next, loadout: extraDraft?.loadout ?? next.loadout });
-    setRating(null);
+    setStrengthRoll(null);
   }
   function add() {
     try {
-      if (!chosen) throw new Error('Choose a character to add.');
+      if (!prepared) throw new Error('Choose a character to add.');
       if (choice === 'extra' && !extraName.trim()) throw new Error('Give the extra combatant a name.');
-      const sheet = { ...chosen, name: choice === 'extra' ? extraName.trim() : chosen.name, strength: rating ?? chosen.strength };
+      const sheet = { ...prepared, name: choice === 'extra' ? extraName.trim() : prepared.name };
       const id = choice === 'extra' ? crypto.randomUUID() : choice === 'current' ? encounter.actorId || activeId || crypto.randomUUID() : choice;
       onChange(addCombatant(encounter, sheet, id));
-      setRating(null); setExtraName(''); setPresetId(''); setExtraDraft(null); setAdding(false); onError('');
+      setStrengthRoll(null); setExtraName(''); setPresetId(''); setExtraDraft(null); setAdding(false); onError('');
     } catch (caught) { onError(caught instanceof Error ? caught.message : 'Could not add this character.'); }
   }
   const nextPhase = encounter.phase === 'shooting' ? 'Brawling 1' : encounter.phase === 'brawl-1' ? 'Brawling 2' : `Turn ${encounter.turn + 1}`;
@@ -94,20 +95,21 @@ export default function EncounterPanel({ encounter, current, saved, activeId, er
     </>}
     <div className="encounter-tools"><button className="text-button" onClick={() => { if (!adding && choice === 'extra') ensureExtra(); setAdding(!adding); }} aria-expanded={adding}><Plus size={15}/>Add combatant</button><button className="text-button" disabled={!encounter.previous} onClick={() => { onChange(undoEncounter(encounter)); setEditing(''); }}><RotateCcw size={14}/>Undo tracker change</button><button className="text-button" onClick={() => setResetting(!resetting)}>New shootout</button></div>
     {adding && <form className="add-combatant" onSubmit={event => { event.preventDefault(); add(); }}>
-      <label>Character<select value={choice} onChange={event => { const value = event.target.value; setChoice(value); setRating(null); if (value === 'extra') ensureExtra(); }}><option value="current">Current sheet · {current.name || 'Unnamed'}</option>{saved.map(entry => <option key={entry.id} value={entry.id}>{entry.character.name || 'Unnamed'}</option>)}<option value="extra">Quick NPC / extra</option></select></label>
+      <label>Character<select value={choice} onChange={event => { const value = event.target.value; setChoice(value); setStrengthRoll(null); if (value === 'extra') ensureExtra(); }}><option value="current">Current sheet · {current.name || 'Unnamed'}</option>{saved.map(entry => <option key={entry.id} value={entry.id}>{entry.character.name || 'Unnamed'}</option>)}<option value="extra">Quick NPC / extra</option></select></label>
       {choice === 'extra' && <>
         <label>Extra preset<select value={presetId} onChange={event => choosePreset(event.target.value)}><option value="">Custom · randomly rolled NPC</option>{extraPresets.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <label>Name<input maxLength={80} value={extraName} onChange={event => setExtraName(event.target.value)} placeholder="The stranger" required/></label>
       </>}
-      <label>Strength rating<input type="number" min="1" max="99" step="1" value={rating ?? chosen?.strength ?? ''} onChange={event => setRating(event.target.value)} placeholder="Usually 8–20" required/></label>
+      <label>Strength percentile roll<input type="text" inputMode="numeric" maxLength={3} value={strengthRoll ?? chosen?.percentiles?.strength ?? ''} onChange={event => setStrengthRoll(event.target.value)} placeholder="1–100" required={!prepared?.strength?.trim()}/></label>
+      <label>Strength rating<output className="automatic-target">{prepared?.strength || '—'}</output></label>
       {choice === 'extra' && extraDraft && <>
         <label>Preferred weapon<select value={extraDraft.loadout.weaponId} onChange={event => setExtraDraft({ ...extraDraft, loadout: { ...extraDraft.loadout, weaponId: event.target.value } })}>{weaponProfiles.map(weapon => <option key={weapon.id} value={weapon.id}>{weapon.name}</option>)}</select></label>
         {extraDraft.loadout.weaponId.startsWith('custom-') && <label>Weapon speed class<select value={extraDraft.loadout.customSpeed} onChange={event => setExtraDraft({ ...extraDraft, loadout: { ...extraDraft.loadout, customSpeed: event.target.value } })}>{weapons.map(weapon => <option key={weapon.value} value={weapon.value}>{weapon.label} ({signed(weapon.value)})</option>)}</select></label>}
-        <ExtraPreview sheet={{ ...extraDraft, name: extraName, strength: rating ?? extraDraft.strength }}/>
+        <ExtraPreview sheet={{ ...prepared!, name: extraName }}/>
         {!preset && <button className="export-button" type="button" onClick={rerollExtra}><Dice5 size={15}/>Roll new stats</button>}
       </>}
       <button className="export-button" type="submit"><Plus size={15}/>Add to shootout</button>
-      <p className="panel-hint">{choice === 'extra' ? preset ? 'Preset scores follow the book’s NPC role ranges, with Astra’s preferred weapons.' : 'Custom extras roll all six starting stats using the book’s NPC character creation charts.' : 'Enter the Strength rating, not its percentile score.'} Changes in this fight stay separate from your saved sheets.</p>
+      <p className="panel-hint">{choice === 'extra' ? preset ? 'Preset scores follow the book’s NPC role ranges, with Astra’s preferred weapons.' : 'Custom extras roll all six starting stats using the book’s NPC character creation charts.' : 'Strength is calculated from its percentile roll. Older sheets keep their recorded rating until a roll is entered.'} Changes in this fight stay separate from your saved sheets.</p>
     </form>}
     {resetting && <div className="reset-shootout"><p>Start again at turn 1 with an empty roster? Saved character sheets stay in your library.</p><button className="export-button" onClick={() => { onReset(); setResetting(false); setEditing(''); }}>Start new shootout</button><button className="text-button" onClick={() => setResetting(false)}>Cancel</button></div>}
     {error && <p className="validation-error" role="alert">{error}</p>}

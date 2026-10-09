@@ -66,6 +66,9 @@ export function rollPercentile() {
 // Final percentile scores from the character sheet, after character creation
 // and survival adjustments. Experience is the number of previous gunfights.
 export type AbilityForm = Record<'speed' | 'gunAccuracy' | 'throwingAccuracy' | 'bravery' | 'gunfights', string>;
+export const percentileStats = ['speed', 'gunAccuracy', 'throwingAccuracy', 'strength', 'bravery', 'experience'] as const;
+export type PercentileStat = typeof percentileStats[number];
+export type PercentileResult = { score: number; description: string; value: number; accuracy?: number };
 
 const speedTable = [[5, -5], [10, -2], [20, 0], [35, 2], [50, 4], [65, 6], [80, 9], [90, 12], [95, 15], [96, 18], [97, 19], [98, 20], [99, 21], [100, 22]];
 const accuracyTable = [[5, -9], [15, -6], [25, -3], [35, 0], [50, 2], [65, 5], [75, 7], [85, 10], [95, 15], [98, 18], [100, 20]];
@@ -73,6 +76,43 @@ const braveryTable = [[10, -4, -6], [20, -2, -3], [35, 0, 0], [65, 1, 3], [80, 2
 const experienceTable = [-10, -5, -5, 0, 0, 2, 2, 6, 6, 8, 8, 10];
 const strengthTable = [[2, 8], [5, 9], [10, 10], [17, 11], [25, 12], [40, 13], [60, 14], [75, 15], [83, 16], [90, 17], [95, 18], [98, 19], [100, 20]];
 const startingExperienceTable = [[40, 0], [60, 1], [75, 2], [85, 3], [90, 4], [93, 5], [95, 6], [96, 7], [97, 8], [98, 9], [99, 10], [100, 11]];
+const speedDescriptions = ['Slow', 'Below Average', 'Average', 'Above Average', 'Quick', 'Very Quick', 'Fast', 'Very Fast', 'Lightning', 'Greased Lightning', 'Greased Lightning', 'Greased Lightning', 'Greased Lightning', 'Greased Lightning'];
+const accuracyDescriptions = ['Very Poor', 'Poor', 'Below Average', 'Average', 'Above Average', 'Fair', 'Good', 'Very Good', 'Excellent', 'Crack Shot', 'Deadeye'];
+const strengthDescriptions = ['Feeble', 'Puny', 'Frail', 'Weakling', 'Sickly', 'Average', 'Above Average', 'Sturdy', 'Hardy', 'Strong', 'Very Strong', 'Powerful', 'Mighty'];
+const braveryDescriptions = ['Coward', 'Cowardly', 'Average', 'Above Average', 'Brave', 'Very Brave', 'Fearless', 'Foolhardy'];
+
+export function percentileValue(raw: string): number {
+  const value = raw.trim() === '00' ? 100 : Number(raw);
+  if (!/^\d{1,3}$/.test(raw.trim()) || !Number.isInteger(value) || value < 1 || value > 100) throw new Error('Enter a percentile roll from 1 to 100 (00 means 100).');
+  return value;
+}
+
+// Ability tables p. 5. Values here are displayed and used in combat; the
+// editable inputs remain percentile rolls for all six character stats.
+export function percentileResult(stat: PercentileStat, raw: string): PercentileResult {
+  const score = percentileValue(raw);
+  if (stat === 'experience') {
+    const value = gunfightsFromRoll(score);
+    return { score, value, description: value === 0 ? 'None' : value === 11 ? '11 or more gunfights' : `${value} gunfight${value === 1 ? '' : 's'}`, accuracy: experienceModifier(value) };
+  }
+  const table = stat === 'speed' ? speedTable : stat === 'strength' ? strengthTable : stat === 'bravery' ? braveryTable : accuracyTable;
+  const descriptions = stat === 'speed' ? speedDescriptions : stat === 'strength' ? strengthDescriptions : stat === 'bravery' ? braveryDescriptions : accuracyDescriptions;
+  const index = table.findIndex(row => score <= row[0]);
+  return { score, description: descriptions[index], value: table[index][1], ...(stat === 'bravery' ? { accuracy: table[index][2] } : {}) };
+}
+
+// Choose compatible rolls for fixed NPC presets whose Strength and
+// Experience were supplied as ratings. These are representative NPC rolls.
+export function presetStrengthRoll(rating: number): number {
+  const index = strengthTable.findIndex(row => row[1] === rating);
+  if (index < 0) throw new Error('NPC Strength ratings must be 8–20.');
+  return Math.floor(((index ? strengthTable[index - 1][0] + 1 : 1) + strengthTable[index][0]) / 2);
+}
+export function presetExperienceRoll(gunfights: number): number {
+  const index = startingExperienceTable.findIndex(row => row[1] === gunfights);
+  if (index < 0) throw new Error('Starting NPC Experience must be 0–11 gunfights.');
+  return Math.floor(((index ? startingExperienceTable[index - 1][0] + 1 : 1) + startingExperienceTable[index][0]) / 2);
+}
 
 // Character creation, p. 5: Strength is a rating; Experience is a gunfight
 // count. NPCs use the ordinary rolls, without the player-only initial boosts.
@@ -98,7 +138,11 @@ export function speedAbilityModifier(score: number): number {
 export function abilityModifiers(form: AbilityForm, weaponSpeed: number): Sheet {
   const scores = {} as Record<keyof AbilityForm, number>;
   for (const key of ['speed', 'gunAccuracy', 'throwingAccuracy', 'bravery', 'gunfights'] as const) {
-    const value = Number(form[key]);
+    let value = Number(form[key]);
+    if (key !== 'gunfights') {
+      try { value = percentileValue(form[key]); }
+      catch { throw new Error('Sheet scores must be whole numbers from 1 to 100 (00 is 100).'); }
+    }
     const min = key === 'gunfights' ? 0 : 1;
     const max = key === 'gunfights' ? 999 : 100;
     if (form[key].trim() === '' || !Number.isInteger(value) || value < min || value > max) {

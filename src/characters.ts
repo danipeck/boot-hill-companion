@@ -1,10 +1,11 @@
-import { abilityModifiers, initialSheet, parseSheet, statKeys, weaponProfiles, weapons, type AbilityForm, type SheetForm } from './rules';
+import { abilityModifiers, experienceModifier, initialSheet, parseSheet, percentileResult, percentileValue, statKeys, weaponProfiles, weapons, type AbilityForm, type PercentileStat, type SheetForm } from './rules';
 import { upgradeLegacyExtra } from './extras';
 
 export type Character = {
   name: string;
   strength?: string;
   morale?: string;
+  percentiles?: { strength?: string; experience?: string };
   mode: 'scores' | 'modifiers';
   abilities: AbilityForm;
   modifiers: SheetForm;
@@ -20,6 +21,44 @@ export const sample: Character = {
   modifiers: { ...initialSheet, speed: '12', braverySpeed: '1', gunAccuracy: '5', throwingAccuracy: '5', braveryAccuracy: '3' },
   loadout: { weaponId: 'double-action', customSpeed: '5' },
 };
+
+export function blankCharacter(name: string): Character {
+  return { name, mode: 'scores', abilities: { speed: '', gunAccuracy: '', throwingAccuracy: '', bravery: '', gunfights: '' }, percentiles: { strength: '', experience: '' }, modifiers: { ...initialSheet, name }, loadout: { ...sample.loadout } };
+}
+
+// Derive stored ratings from their rolls. Missing roll fields belong to old
+// sheets and retain their recorded ratings; an entered but invalid roll clears
+// its result so stale values cannot quietly reach combat or a saved export.
+export function normalizeCharacter(character: Character): Character {
+  const next = { ...character, abilities: { ...character.abilities }, modifiers: { ...character.modifiers } };
+  if (next.percentiles?.strength !== undefined) {
+    try { next.strength = String(percentileResult('strength', next.percentiles.strength).value); }
+    catch { next.strength = ''; }
+  }
+  if (next.percentiles?.experience !== undefined) {
+    try {
+      const result = percentileResult('experience', next.percentiles.experience);
+      next.abilities.gunfights = String(result.value);
+      next.modifiers.experience = String(result.accuracy);
+    } catch { next.abilities.gunfights = ''; next.modifiers.experience = ''; }
+  }
+  if (next.mode === 'scores' && next.percentiles !== undefined) {
+    if (next.morale !== undefined) {
+      try { next.morale = String(percentileValue(next.abilities.bravery)); } catch { next.morale = ''; }
+    }
+    try {
+      const weapon = weaponProfiles.find(item => item.id === next.loadout.weaponId)!;
+      const modifiers = abilityModifiers(next.abilities, weapon.ranges ? weapon.speed : Number(next.loadout.customSpeed));
+      next.modifiers = { name: next.name, ...Object.fromEntries(Object.entries(modifiers).map(([key, value]) => [key, String(value)])) } as SheetForm;
+    } catch { /* Individual readouts still show the valid rolls in a draft. */ }
+  }
+  return next;
+}
+
+export function setPercentileRoll(character: Character, stat: PercentileStat, value: string): Character {
+  if (stat === 'strength' || stat === 'experience') return normalizeCharacter({ ...character, percentiles: { ...character.percentiles, [stat]: value } });
+  return normalizeCharacter({ ...character, abilities: { ...character.abilities, [stat]: value } });
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -55,9 +94,19 @@ export function parseCharacter(value: unknown, validateStats = true): Character 
     loadout = { weaponId, customSpeed };
   }
   let character: Character = { name: value.name, mode: value.mode as Character['mode'], abilities, modifiers, loadout };
+  if (value.percentiles !== undefined) {
+    if (!isRecord(value.percentiles)) throw new Error('Invalid percentile rolls in the character sheet.');
+    character.percentiles = {};
+    for (const stat of ['strength', 'experience'] as const) {
+      if (value.percentiles[stat] !== undefined) {
+        character.percentiles[stat] = field(value.percentiles[stat], `${stat} roll`);
+        if (validateStats) percentileValue(character.percentiles[stat]!);
+      }
+    }
+  }
   if (value.strength !== undefined) {
     character.strength = field(value.strength, 'Strength');
-    if (validateStats && character.strength.trim() !== '' && (!Number.isInteger(Number(character.strength)) || Number(character.strength) < 1 || Number(character.strength) > 99)) {
+    if (validateStats && character.percentiles?.strength === undefined && character.strength.trim() !== '' && (!Number.isInteger(Number(character.strength)) || Number(character.strength) < 1 || Number(character.strength) > 99)) {
       throw new Error('Strength must be a whole-number rating from 1 to 99, or left blank.');
     }
   }
@@ -67,7 +116,7 @@ export function parseCharacter(value: unknown, validateStats = true): Character 
       throw new Error('Morale must be a whole-number percentage from 0 to 100, or left blank.');
     }
   }
-  character = upgradeLegacyExtra(character);
+  character = normalizeCharacter(upgradeLegacyExtra(character));
   if (validateStats) {
     const weapon = weaponProfiles.find(item => item.id === loadout.weaponId)!;
     const speed = weapon.ranges ? weapon.speed : Number(loadout.customSpeed);

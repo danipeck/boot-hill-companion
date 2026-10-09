@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { exportCharacterJson, importCharacter, loadSaved, parseCharacter, readLibrary, sample, type Character } from './characters';
+import { exportCharacterJson, importCharacter, loadSaved, parseCharacter, readLibrary, sample, setPercentileRoll, type Character } from './characters';
 import { addCombatant, combatantsBySpeed, combatantSpeed, newEncounter, readEncounter, updateActingSheet, writeEncounter } from './encounter';
 import { createExtra, extraPresets, generateExtra } from './extras';
 import { abilityModifiers, calculate, gunfightsFromRoll, strengthFromScore, weaponProfiles } from './rules';
@@ -152,7 +152,8 @@ test('presets and random extras survive editing, refresh, and JSON save/load', (
   for (const character of [createExtra('cavalry-trooper', 'Pat'), generateExtra('Pat', () => 50)]) {
     let encounter = addCombatant(newEncounter('extras'), character, 'pat');
     encounter = addCombatant(encounter, createExtra('cavalry-trooper'), 'another-trooper');
-    encounter = updateActingSheet(encounter, { ...encounter.members[0].sheet, morale: '70', strength: '15', abilities: { ...character.abilities, bravery: '70' }, loadout: { weaponId: 'shotgun', customSpeed: '-5' } });
+    const edited = setPercentileRoll(setPercentileRoll(encounter.members[0].sheet, 'strength', '65'), 'bravery', '70');
+    encounter = updateActingSheet(encounter, { ...edited, loadout: { weaponId: 'shotgun', customSpeed: '-5' } });
     let json = '';
     writeEncounter({ setItem: (_key, value) => { json = value; } }, encounter);
     const restored = readEncounter({ getItem: () => json }, 'fallback');

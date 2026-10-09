@@ -1,7 +1,7 @@
-import { parseCharacter, type Character } from './characters';
+import { normalizeCharacter, parseCharacter, type Character } from './characters';
 import { type BrawlResult, type HoldKind } from './brawling';
 import { resolveWound, type HitEffects, type Wound } from './wounds';
-import { signed, speedAbilityModifier } from './rules';
+import { percentileValue, signed, speedAbilityModifier } from './rules';
 
 export type Phase = 'shooting' | 'brawl-1' | 'brawl-2';
 export const phaseNames: Record<Phase, string> = { shooting: 'Shooting', 'brawl-1': 'Brawling · round 1', 'brawl-2': 'Brawling · round 2' };
@@ -30,6 +30,7 @@ export function withDefaultTarget(encounter: Encounter): Encounter {
 export function updateActingSheet(encounter: Encounter, sheet: Character): Encounter {
   const actor = encounter.members.find(member => member.id === encounter.actorId);
   if (!actor) return encounter;
+  sheet = normalizeCharacter(sheet);
   let maxStrength = actor.maxStrength;
   try { maxStrength = strengthRating(sheet.strength); } catch { /* Keep the rating while an input is unfinished. */ }
   return { ...encounter, members: encounter.members.map(member => member.id === actor.id ? { ...member, sheet, maxStrength } : member) };
@@ -44,7 +45,8 @@ export function canAct(member: Combatant) { return combatantStatus(member) === '
 export function combatantSpeed(member: Combatant): { modifier: number | null; score: number | null; label: string } {
   const scores = member.sheet.mode === 'scores';
   const raw = scores ? member.sheet.abilities.speed : member.sheet.modifiers.speed;
-  const value = Number(raw);
+  let value = Number(raw);
+  if (scores) { try { value = percentileValue(raw); } catch { value = NaN; } }
   if (raw.trim() && Number.isInteger(value)) {
     if (scores && value >= 1 && value <= 100) {
       const modifier = speedAbilityModifier(value);
@@ -80,6 +82,7 @@ function freeInactiveHolds(members: Combatant[]) {
 }
 export function addCombatant(encounter: Encounter, sheet: Character, id: string): Encounter {
   if (encounter.members.some(member => member.id === id || member.libraryId === id)) throw new Error('That combatant is already in the shootout.');
+  sheet = normalizeCharacter(sheet);
   const maxStrength = strengthRating(sheet.strength);
   const member: Combatant = { id, sheet: parseCharacter(sheet, false), maxStrength, loss: 0, dead: false, wounds: [], hold: null, modifier: 0, nextModifier: 0 };
   const next = checkpoint(encounter, `${sheet.name || 'Unnamed gunslinger'} joined the shootout.`);

@@ -159,6 +159,11 @@ h2 { font-size: 1.5rem; font-weight: 400; }
 .stat-row label { font-size: 1rem; font-weight: 600; }
 .stat-row small { display: block; margin-top: 4px; font-size: .875rem; font-weight: 400; color: var(--muted); }
 .stat-row input { width: 76px; padding: 10px 5px; text-align: center; font-size: 1.125rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.derived-stat { grid-column: 2 / -1; color: var(--green); font-size: .875rem; line-height: 1.6; font-variant-numeric: tabular-nums; }
+.legacy-stats dl { margin: 16px 0; }
+.legacy-stats dl > div { display: flex; justify-content: space-between; gap: 16px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.legacy-stats dt { color: var(--muted); }
+.legacy-stats dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
 .sheet-footnote { display: flex; gap: 8px; margin-top: 18px; color: var(--muted); font-size: .875rem; line-height: 1.7; }
 .sheet-footnote svg { margin-top: 2px; color: #9e9481; }
 .character-bottom { display: flex; flex-direction: column; align-items: stretch; gap: 12px; margin-top: 24px; padding-top: 17px; border-top: 1px solid var(--line); }
