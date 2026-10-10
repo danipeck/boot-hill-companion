@@ -2,6 +2,7 @@ import { normalizeCharacter, parseCharacter, type Character } from './characters
 import { type BrawlResult, type HoldKind } from './brawling';
 import { resolveWound, type HitEffects, type Wound } from './wounds';
 import { percentileResult, percentileValue, signed, speedAbilityModifier, weaponProfiles, weapons } from './rules';
+import { parseEquipment, type Equipment } from './equipment';
 
 export type Phase = 'shooting' | 'brawl-1' | 'brawl-2';
 export const phaseNames: Record<Phase, string> = { shooting: 'Shooting', 'brawl-1': 'Brawling · round 1', 'brawl-2': 'Brawling · round 2' };
@@ -34,6 +35,12 @@ export function updateActingSheet(encounter: Encounter, sheet: Character): Encou
   let maxStrength = actor.maxStrength;
   try { maxStrength = strengthRating(sheet.strength); } catch { /* Keep the rating while an input is unfinished. */ }
   return { ...encounter, members: encounter.members.map(member => member.id === actor.id ? { ...member, sheet, maxStrength } : member) };
+}
+export function updateCombatantEquipment(encounter: Encounter, libraryId: string | null, equipment: Equipment): Encounter {
+  if (!libraryId) return encounter;
+  const update = (members: Combatant[]) => members.map(member => (member.libraryId || member.id) === libraryId ? { ...member, sheet: { ...member.sheet, equipment: parseEquipment(equipment) } } : member);
+  // Undoing combat must not undo a purchase or restore an older cash balance.
+  return { ...encounter, members: update(encounter.members), ...(encounter.previous ? { previous: { ...encounter.previous, members: update(encounter.previous.members) } } : {}) };
 }
 export function strengthRating(value: string | undefined): number {
   if (!value?.trim() || !Number.isInteger(Number(value)) || Number(value) < 1 || Number(value) > 99) throw new Error('Enter a Strength rating from 1 to 99 before adding this character. Use the rating, usually 8–20, rather than the percentile score.');

@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import { ArrowDownToLine, ArrowRight, BookOpen, Check, ChevronDown, Crosshair, Dice5, FolderOpen, History, Moon, Plus, RotateCcw, Save, Settings2, Sparkles, Sun, Trash2, Upload, UserRound, X, Zap } from 'lucide-react';
 import { abilityModifiers, calculate, conditions, parseSheet, probability, ranges, resolveHit, rollPercentile, shooterMovement, signed, targetMovement, weaponProfiles, weapons } from './rules';
-import { blankCharacter, normalizeCharacter, exportCharacterJson, importCharacter, loadSaved, readCharacterFile, readLibrary, removeSaved, sample, saveDraft, writeLibrary, type Character, type CharacterLibrary } from './characters';
+import { blankCharacter, normalizeCharacter, exportCharacterJson, importCharacter, loadSaved, readCharacterFile, readLibrary, removeSaved, sample, saveDraft, updateEquipment, writeLibrary, type Character, type CharacterLibrary } from './characters';
 import WoundResult, { WoundDetails } from './WoundResult';
 import { hitEffectsSummary, rollHitEffects, type HitContext, type HitEffects } from './wounds';
 import EncounterPanel from './EncounterPanel';
 import CharacterStats from './CharacterStats';
+import CharacterManagement from './CharacterManagement';
+import type { Equipment } from './equipment';
 import BrawlPanel, { BrawlDetails, type BrawlRoll } from './BrawlPanel';
 import { continueHold, rollBrawl, type BrawlOptions, type CombatMode } from './brawling';
-import { advancePhase, applyBrawl, applyShotWounds, canAct, newEncounter, phaseNames, readEncounter, releaseHold, trackedShootingModifiers, updateActingSheet, withDefaultTarget, writeEncounter, type ActionContext, type Encounter } from './encounter';
+import { advancePhase, applyBrawl, applyShotWounds, canAct, newEncounter, phaseNames, readEncounter, releaseHold, trackedShootingModifiers, updateActingSheet, updateCombatantEquipment, withDefaultTarget, writeEncounter, type ActionContext, type Encounter } from './encounter';
 
 type Roll = HitContext & { kind: 'shot'; order: number; id: string; roll: number; chance: number; weapon: string; character: string; range: string; firstShot: number; time: string; woundResult?: HitEffects; context?: ActionContext; targetName: string };
 
@@ -33,6 +35,17 @@ function Dialog({ title, children, onClose }: { title: string; children: ReactNo
 }
 
 export default function App() {
+  const [characterView, setCharacterView] = useState(() => typeof window !== 'undefined' && window.location.pathname.replace(/\/$/, '') === '/character-sheet');
+  useEffect(() => {
+    const onPopState = () => setCharacterView(window.location.pathname.replace(/\/$/, '') === '/character-sheet');
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+  function navigate(characterPage: boolean) {
+    window.history.pushState(null, '', characterPage ? '/character-sheet' : '/');
+    setCharacterView(characterPage);
+    window.scrollTo(0, 0);
+  }
   const [theme, setTheme] = useState<'light' | 'dark'>(() => document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
   const [library, setLibrary] = useState<CharacterLibrary>(() => {
     try { return readLibrary(localStorage); }
@@ -86,6 +99,11 @@ export default function App() {
   }
   function setCustomSpeed(next: string) {
     setCharacter(current => ({ ...current, loadout: { ...current.loadout, customSpeed: next } }));
+  }
+  function setEquipment(equipment: Equipment) {
+    const next = updateEquipment(library, equipment);
+    setLibrary(next);
+    setEncounter(current => updateCombatantEquipment(actor ? updateActingSheet(current, next.draft) : current, next.activeId || actor?.libraryId || actor?.id || null, equipment));
   }
 
   useEffect(() => {
@@ -294,9 +312,10 @@ export default function App() {
 
   return <>
     <header className="site-header"><div className="header-inner">
-      <a className="brand" href="#" aria-label="Boot Hill home"><BadgeStar/><span>BOOT HILL<small>THE GUNSLINGER’S COMPANION</small></span></a>
+      <a className="brand" href="/" onClick={event => { if (!event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigate(false); } }} aria-label="Boot Hill home"><BadgeStar/><span>BOOT HILL<small>THE GUNSLINGER’S COMPANION</small></span></a>
       <div className="header-actions">
         <span className="edition">SECOND EDITION <span>1979</span></span>
+        <a className="header-button" href={characterView ? '/' : '/character-sheet'} onClick={event => { if (!event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigate(!characterView); } }}>{characterView ? <Crosshair size={16}/> : <UserRound size={16}/>}<span>{characterView ? 'Combat' : 'Character sheets'}</span></a>
         <button className="header-button" type="button" onClick={() => setDialog('rules')}><BookOpen size={16}/>Rules reference</button>
         <button className="header-button theme-toggle" type="button" onClick={toggleTheme} aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`} title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}>
           {theme === 'light' ? <Moon size={16}/> : <Sun size={16}/>}
@@ -307,10 +326,10 @@ export default function App() {
 
     <main className="page" id="tabletop">
       <section className="intro">
-        <h1>Character sheets &amp; combat</h1>
+        <h1>{characterView ? 'Character sheet & inventory' : 'Character sheets & combat'}</h1>
         <Desert/>
       </section>
-      <div className="workspace">
+      <div className={`workspace ${characterView ? 'character-workspace' : ''}`}>
         <aside className="character-card card" id="character-sheet">
           <div className="section-heading"><div className="title-with-icon"><UserRound size={18}/><h2>Character sheet</h2></div><button className="text-button" onClick={() => { setNewName(''); setDialog('new'); }}><Plus size={14}/> New</button></div>
           <div className="character-library">
@@ -321,6 +340,7 @@ export default function App() {
                 {library.characters.map((entry, index) => <option key={entry.id} value={entry.id}>{entry.character.name || 'Unnamed gunslinger'}{library.characters.some((other, otherIndex) => otherIndex !== index && other.character.name === entry.character.name) ? ` (${index + 1})` : ''}</option>)}
               </select>
               <button type="button" className="export-button" onClick={loadSheet} disabled={!selectedCharacterId}><FolderOpen size={14}/> Load</button>
+              <button type="button" className="export-button save-sheet-button" onClick={saveSheet}><Save size={14}/> Save sheet</button>
               <button type="button" className="icon-button library-delete" onClick={deleteSheet} disabled={!selectedCharacterId} aria-label="Delete selected saved character" title="Remove selected character from library"><Trash2 size={14}/></button>
             </div>
           </div>
@@ -334,7 +354,6 @@ export default function App() {
           <CharacterStats character={character} onChange={setCharacter}/>
           <div className="character-bottom">
             <div className="character-actions">
-              <button type="button" className="export-button save-sheet-button" onClick={saveSheet}><Save size={14}/> Save sheet</button>
               <button type="button" className="export-button" onClick={() => importRef.current?.click()} disabled={isImporting}><Upload size={14}/> {isImporting ? 'Importing…' : 'Import'}</button>
               <button type="button" className="export-button" onClick={exportCharacter}><ArrowDownToLine size={14}/> Export</button>
               <input ref={importRef} type="file" accept=".json,application/json" hidden aria-label="Import character JSON" onChange={handleImport}/>
@@ -345,7 +364,8 @@ export default function App() {
           <div className="character-note"><Sparkles size={14}/><span>Start with the Colorado Kid example, or make this sheet your own.</span></div>
         </aside>
 
-        <div className="combat-column">
+        {characterView && <CharacterManagement key={actor?.id || library.activeId || 'draft'} character={character} onChange={setEquipment}/>}
+        <div className="combat-column" hidden={characterView}>
           <EncounterPanel encounter={encounter} firstShotAdjustment={speedAdjustment - woundPenalty} current={character} saved={library.characters} activeId={library.activeId} error={encounterError} storageError={encounterStorageError} onChange={updateEncounter} onError={setEncounterError} onAdvance={nextPhase} onReset={() => { updateEncounter(newEncounter(crypto.randomUUID())); setCombatMode('shooting'); }} onActor={selectActor} onTarget={id => updateEncounter({ ...encounter, targetId: id })}/>
           <div className="combat-mode-tabs" role="group" aria-label="Combat action">{(['shooting', 'punching', 'grappling'] as const).map(mode => <button key={mode} aria-pressed={combatMode === mode} className={combatMode === mode ? 'active' : ''} onClick={() => setCombatMode(mode)}>{mode === 'shooting' ? 'Shooting / Throwing' : mode === 'punching' ? 'Punching' : 'Grappling'}</button>)}</div>
           <div className="shooting-panels" hidden={combatMode !== 'shooting'}>

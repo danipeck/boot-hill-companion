@@ -182,6 +182,6 @@ test('handles unavailable browser storage and surfaces failed writes', () => {
 
 test('reads small files and reports oversized or unreadable files', async () => {
   assert.equal(await readCharacterFile({ size: 2, text: async () => '{}' }), '{}');
-  await assert.rejects(readCharacterFile({ size: 65537, text: async () => '{}' }), /smaller than 64 KB/);
+  await assert.rejects(readCharacterFile({ size: 1048577, text: async () => '{}' }), /smaller than 1 MB/);
   await assert.rejects(readCharacterFile({ size: 2, text: async () => { throw new Error('Unreadable'); } }), /Could not read/);
 });

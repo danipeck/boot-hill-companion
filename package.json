@@ -7,7 +7,7 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "node --import tsx --test src/characters.test.ts src/wounds.test.ts src/brawling.test.ts src/encounter.test.ts src/extras.test.ts src/percentiles.test.ts"
+    "test": "node --import tsx --test src/characters.test.ts src/wounds.test.ts src/brawling.test.ts src/encounter.test.ts src/extras.test.ts src/percentiles.test.ts src/equipment.test.ts"
   },
   "dependencies": {
     "lucide-react": "^1.31.0",

@@ -1,10 +1,12 @@
 import { abilityModifiers, experienceModifier, initialSheet, parseSheet, percentileResult, percentileValue, statKeys, weaponProfiles, weapons, type AbilityForm, type PercentileStat, type SheetForm } from './rules';
 import { upgradeLegacyExtra } from './extras';
+import { parseEquipment, type Equipment } from './equipment';
 
 export type Character = {
   name: string;
   strength?: string;
   morale?: string;
+  equipment?: Equipment;
   percentiles?: { strength?: string; experience?: string };
   mode: 'scores' | 'modifiers';
   abilities: AbilityForm;
@@ -95,6 +97,7 @@ export function parseCharacter(value: unknown, validateStats = true): Character 
     loadout = { weaponId, customSpeed };
   }
   let character: Character = { name: value.name, mode: value.mode as Character['mode'], abilities, modifiers, loadout };
+  if (value.equipment !== undefined) character.equipment = parseEquipment(value.equipment);
   if (value.percentiles !== undefined) {
     if (!isRecord(value.percentiles)) throw new Error('Invalid percentile rolls in the character sheet.');
     character.percentiles = {};
@@ -171,6 +174,15 @@ export function writeLibrary(storage: Pick<Storage, 'setItem'>, library: Charact
   storage.setItem(libraryKey, JSON.stringify(library));
 }
 
+export function updateEquipment(library: CharacterLibrary, equipment: Equipment): CharacterLibrary {
+  equipment = parseEquipment(equipment);
+  return {
+    ...library, draft: normalizeCharacter({ ...library.draft, equipment }),
+    // Store possessions immediately while retaining explicitly saved stats.
+    characters: library.characters.map(entry => entry.id === library.activeId ? { ...entry, character: { ...entry.character, equipment: parseEquipment(equipment) } } : entry),
+  };
+}
+
 export function saveDraft(library: CharacterLibrary, newId: string): CharacterLibrary {
   const character = parseCharacter(library.draft);
   character.name = character.name.trim() || 'Unnamed gunslinger';
@@ -203,7 +215,7 @@ export function importCharacter(library: CharacterLibrary, text: string, newId: 
 }
 
 export async function readCharacterFile(file: Pick<File, 'size' | 'text'>): Promise<string> {
-  if (file.size > 64 * 1024) throw new Error('Choose a character JSON file smaller than 64 KB.');
+  if (file.size > 1024 * 1024) throw new Error('Choose a character JSON file smaller than 1 MB.');
   try { return await file.text(); }
   catch { throw new Error('Could not read that file. Please choose it again.'); }
 }
