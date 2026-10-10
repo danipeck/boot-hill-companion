@@ -3,6 +3,7 @@ import { type BrawlResult, type HoldKind } from './brawling';
 import { resolveWound, type HitEffects, type Wound } from './wounds';
 import { percentileResult, percentileValue, signed, speedAbilityModifier, weaponProfiles, weapons } from './rules';
 import { parseEquipment, type Equipment } from './equipment';
+import type { MisfireResult } from './misfires';
 
 export type Phase = 'shooting' | 'brawl-1' | 'brawl-2';
 export const phaseNames: Record<Phase, string> = { shooting: 'Shooting', 'brawl-1': 'Brawling · round 1', 'brawl-2': 'Brawling · round 2' };
@@ -10,6 +11,7 @@ export type Combatant = {
   id: string; libraryId?: string; sheet: Character; maxStrength: number; loss: number; dead: boolean;
   wounds: Wound[]; hold: { kind: HoldKind; by: string } | null;
   modifier: number; nextModifier: number;
+  weaponJams?: Record<string, { clearAtTurn: number | null }>;
 };
 export type EncounterCore = {
   id: string; turn: number; phase: Phase; members: Combatant[];
@@ -17,6 +19,7 @@ export type EncounterCore = {
 };
 export type Encounter = EncounterCore & { version: 1; previous?: EncounterCore };
 export type ActionContext = { encounterId: string; actorId: string; targetId: string; turn: number; phase: Phase };
+export type MisfireContext = Omit<ActionContext, 'targetId'>;
 export const encounterKey = 'boot-hill.shootout.v1';
 
 export function newEncounter(id: string): Encounter {
@@ -131,7 +134,41 @@ export function advancePhase(encounter: Encounter): Encounter {
   const next = checkpoint(encounter, `Turn ${turn} · ${phaseNames[phase]}.`);
   // Round-two effects also modify the intervening shooting phase (×10%)
   // and remain applicable to round one of the next brawl.
-  return { ...next, turn, phase, acted: [], members: next.members.map(member => encounter.phase === 'shooting' ? member : { ...member, modifier: member.nextModifier, nextModifier: 0 }) };
+  return { ...next, turn, phase, acted: [], members: next.members.map(member => {
+    const updated = encounter.phase === 'shooting' ? member : { ...member, modifier: member.nextModifier, nextModifier: 0 };
+    return phase === 'shooting' && updated.weaponJams ? { ...updated, weaponJams: Object.fromEntries(Object.entries(updated.weaponJams).filter(([, jam]) => jam.clearAtTurn === null || jam.clearAtTurn > turn)) } : updated;
+  }) };
+}
+export function jammedWeapon(member: Combatant, weaponId: string, turn: number) {
+  const jam = member.weaponJams?.[weaponId];
+  return jam && (jam.clearAtTurn === null || jam.clearAtTurn > turn) ? jam : null;
+}
+export function startClearingJam(encounter: Encounter, actorId: string, weaponId: string): Encounter {
+  if (encounter.phase !== 'shooting') throw new Error('Start clearing during the shooting phase.');
+  const actor = encounter.members.find(member => member.id === actorId);
+  if (!actor || !canAct(actor)) throw new Error('Choose a standing character to clear the jam.');
+  const jam = jammedWeapon(actor, weaponId, encounter.turn);
+  if (!jam) throw new Error('This weapon is not jammed.');
+  if (jam.clearAtTurn !== null) return encounter;
+  const next = checkpoint(encounter, `${actor.sheet.name} started clearing ${weaponProfiles.find(item => item.id === weaponId)?.name}: ready on turn ${encounter.turn + 3}.`);
+  return { ...next, members: next.members.map(member => member.id === actorId ? { ...member, weaponJams: { ...member.weaponJams, [weaponId]: { clearAtTurn: encounter.turn + 3 } } } : member) };
+}
+export function applyMisfire(encounter: Encounter, context: MisfireContext, actionId: string, weaponId: string, result: MisfireResult): Encounter {
+  if (encounter.applied.includes(actionId)) return encounter;
+  if (context.encounterId !== encounter.id) throw new Error('This misfire belongs to a different shootout.');
+  if (context.phase !== 'shooting' || encounter.phase !== 'shooting' || context.turn !== encounter.turn) throw new Error('Apply this misfire during the shooting turn in which it was rolled.');
+  const actor = encounter.members.find(member => member.id === context.actorId);
+  if (!actor || !canAct(actor)) throw new Error('The firing character cannot act.');
+  if (weaponProfiles.find(weapon => weapon.id === weaponId)?.attack !== 'gun') throw new Error('Only firearms can misfire.');
+  if (jammedWeapon(actor, weaponId, encounter.turn)) throw new Error('This weapon is already jammed.');
+  if (result.outcome !== 'jam' && !result.injury) return encounter;
+  const next = checkpoint(encounter, `${actor.sheet.name}: ${result.outcome === 'jam' ? 'jammed weapon' : 'injured by firearm explosion'}.`);
+  const members = next.members.map(member => member.id !== actor.id ? member : {
+    ...member,
+    ...(result.outcome === 'jam' ? { weaponJams: { ...member.weaponJams, [weaponId]: { clearAtTurn: null } } } : {}),
+    ...(result.injury ? { loss: member.loss + result.injury.totalStrengthLoss, dead: member.dead || result.injury.mortal, wounds: [...member.wounds, ...result.injury.wounds] } : {}),
+  });
+  return { ...next, members: freeInactiveHolds(members), applied: [...next.applied, actionId] };
 }
 export function undoEncounter(encounter: Encounter): Encounter {
   return encounter.previous ? withDefaultTarget({ version: 1, ...structuredClone(encounter.previous) }) : encounter;
@@ -200,6 +237,12 @@ export function readEncounter(storage: Pick<Storage, 'getItem'>, fallbackId: str
       ids.add(member.id);
       if (member.libraryId !== undefined && typeof member.libraryId !== 'string') throw new Error('Invalid saved character');
       if (member.hold && (member.hold.by === member.id || typeof member.hold.by !== 'string' || !['left-arm', 'right-arm', 'head-lock', 'bear-hug'].includes(member.hold.kind))) throw new Error('Invalid hold');
+      if (member.weaponJams !== undefined) {
+        if (!member.weaponJams || typeof member.weaponJams !== 'object' || Array.isArray(member.weaponJams)) throw new Error('Invalid weapon jams');
+        for (const [weaponId, jam] of Object.entries(member.weaponJams)) {
+          if (weaponProfiles.find(weapon => weapon.id === weaponId)?.attack !== 'gun' || !jam || (jam.clearAtTurn !== null && (!Number.isSafeInteger(jam.clearAtTurn) || jam.clearAtTurn < 1))) throw new Error('Invalid weapon jam');
+        }
+      }
       const wounds = member.wounds.map(wound => {
         // Reconstruct validated effects from recorded dice rather than trusting JSON.
         return resolveWound(wound.locationRoll, wound.severityRoll);

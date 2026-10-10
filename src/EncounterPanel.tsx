@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ArrowRight, Dice5, Plus, RotateCcw, Trash2, Users } from 'lucide-react';
 import { holdNames } from './brawling';
 import { normalizeCharacter, setPercentileRoll, type Character, type SavedCharacter } from './characters';
-import { addCombatant, adjustCombatant, combatantsByFirstShot, combatantsBySpeed, combatantFirstShot, combatantSpeed, combatantStatus, phaseNames, remainingStrength, removeCombatant, undoEncounter, type Combatant, type Encounter } from './encounter';
+import { addCombatant, adjustCombatant, canAct, jammedWeapon, startClearingJam, combatantsByFirstShot, combatantsBySpeed, combatantFirstShot, combatantSpeed, combatantStatus, phaseNames, remainingStrength, removeCombatant, undoEncounter, type Combatant, type Encounter } from './encounter';
 import { signed, weaponProfiles, weapons } from './rules';
 import { createExtra, extraPresets, generateExtra } from './extras';
 
@@ -90,6 +90,14 @@ export default function EncounterPanel({ encounter, current, saved, activeId, er
           <div className="combatant-summary"><div><strong>{member.sheet.name || 'Unnamed gunslinger'}</strong><span className={`result-tag ${status === 'Standing' ? 'hit' : 'miss'}`}>{status}</span></div><span className="strength-count">{remainingStrength(member)} / {member.maxStrength} Strength · {orderLabel(member)}</span></div>
           <div className="strength-bar" aria-hidden="true"><span style={{ width: `${remainingStrength(member) / member.maxStrength * 100}%` }}/></div>
           <div className="combatant-meta"><span>{member.wounds.length} wound{member.wounds.length === 1 ? '' : 's'}{member.modifier !== 0 ? ` · ${signed(member.modifier)} this round` : ''}{member.nextModifier !== 0 ? ` · ${signed(member.nextModifier)} next round` : ''}{encounter.acted.includes(member.id) ? ' · acted' : ''}</span><div><button className="text-button" onClick={() => { setEditing(member.id); setRemaining(String(remainingStrength(member))); setDead(member.dead); }}>Adjust</button><button className="icon-button" aria-label={`Remove ${member.sheet.name} from the shootout`} onClick={() => onChange(removeCombatant(encounter, member.id))}><Trash2 size={14}/></button></div></div>
+          {Object.keys(member.weaponJams ?? {}).map(weaponId => {
+            const jam = jammedWeapon(member, weaponId, encounter.turn);
+            if (!jam) return null;
+            return <div className="weapon-jam" key={weaponId}><strong>{weaponProfiles.find(weapon => weapon.id === weaponId)?.name} · jammed</strong>{jam.clearAtTurn === null ? <button className="export-button" disabled={!canAct(member) || !shooting} onClick={() => {
+              try { onChange(startClearingJam(encounter, member.id, weaponId)); onError(''); }
+              catch (caught) { onError(caught instanceof Error ? caught.message : 'Could not clear this weapon.'); }
+            }}>Start clearing (3 turns)</button> : <span>Clearing · {jam.clearAtTurn - encounter.turn} turn{jam.clearAtTurn - encounter.turn === 1 ? '' : 's'} left · ready turn {jam.clearAtTurn}</span>}</div>;
+          })}
           {member.hold && <p className="hold-label">{holdNames[member.hold.kind]} · held by {holder?.sheet.name}</p>}
           {member.wounds.length > 0 && <details className="tracked-wounds"><summary>Wound details</summary>{member.wounds.map((wound, index) => <p key={index}>{wound.severity} · {wound.location} · {wound.strengthLoss === null ? 'Fatal' : `−${wound.strengthLoss} Strength`}{wound.effects.length > 0 && <small>{wound.effects.join(' ')}</small>}</p>)}</details>}
           {editing === member.id && <form className="combatant-adjust" onSubmit={event => { event.preventDefault(); try { if (!remaining.trim()) throw new Error('Enter current Strength.'); onChange(adjustCombatant(encounter, member.id, Number(remaining), dead)); setEditing(''); onError(''); } catch (caught) { onError(caught instanceof Error ? caught.message : 'Check current Strength.'); } }}><label>Current Strength<input type="number" min={0} max={member.maxStrength} step="1" value={remaining} onChange={event => setRemaining(event.target.value)}/></label><label className="checkbox-label"><input type="checkbox" checked={dead} onChange={event => setDead(event.target.checked)}/>Dead</label><button className="export-button" type="submit">Apply</button><button className="text-button" type="button" onClick={() => setEditing('')}>Cancel</button></form>}

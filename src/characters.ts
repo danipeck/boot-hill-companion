@@ -1,6 +1,7 @@
 import { abilityModifiers, experienceModifier, initialSheet, parseSheet, percentileResult, percentileValue, statKeys, weaponProfiles, weapons, type AbilityForm, type PercentileStat, type SheetForm } from './rules';
 import { upgradeLegacyExtra } from './extras';
 import { parseEquipment, type Equipment } from './equipment';
+import { assertMisfireProfile, type MisfireProfileId } from './misfires';
 
 export type Character = {
   name: string;
@@ -11,7 +12,7 @@ export type Character = {
   mode: 'scores' | 'modifiers';
   abilities: AbilityForm;
   modifiers: SheetForm;
-  loadout: { weaponId: string; customSpeed: string };
+  loadout: { weaponId: string; customSpeed: string; misfireProfile?: MisfireProfileId };
 };
 export type SavedCharacter = { id: string; character: Character };
 export type CharacterLibrary = { version: 1; draft: Character; activeId: string | null; characters: SavedCharacter[] };
@@ -85,7 +86,7 @@ export function parseCharacter(value: unknown, validateStats = true): Character 
   }
   const modifiers = { name: value.name } as SheetForm;
   for (const key of statKeys) modifiers[key] = field(value.modifiers[key], key);
-  let loadout = { ...sample.loadout };
+  let loadout: Character['loadout'] = { ...sample.loadout };
   if (value.loadout !== undefined) {
     if (!isRecord(value.loadout) || typeof value.loadout.weaponId !== 'string') {
       throw new Error('The character file has an unknown weapon.');
@@ -95,6 +96,7 @@ export function parseCharacter(value: unknown, validateStats = true): Character 
     const customSpeed = field(value.loadout.customSpeed, 'weapon speed');
     if (customSpeed.trim() === '' || !weapons.some(weapon => weapon.value === Number(customSpeed))) throw new Error('Choose a valid weapon speed.');
     loadout = { weaponId, customSpeed };
+    if (value.loadout.misfireProfile !== undefined) loadout.misfireProfile = assertMisfireProfile(value.loadout.misfireProfile);
   }
   let character: Character = { name: value.name, mode: value.mode as Character['mode'], abilities, modifiers, loadout };
   if (value.equipment !== undefined) character.equipment = parseEquipment(value.equipment);

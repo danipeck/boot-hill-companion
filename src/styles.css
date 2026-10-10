@@ -28,6 +28,23 @@
 }
 
 * { box-sizing: border-box; }
+.misfire-table { display: grid; gap: 6px; margin: 16px 0; color: var(--muted); }
+.misfire-table select { width: 100%; min-width: 0; color: var(--ink); }
+.misfire-details { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); }
+.misfire-details p { margin: 0 0 7px; }
+.misfire-details p:last-child { margin-bottom: 0; }
+.misfire-details b { color: var(--ink); }
+.misfire-dud, .misfire-explosion, .misfire-jam { border-color: var(--gold); }
+.dialog.misfire-popup { width: min(440px, calc(100% - 32px)); border-color: var(--gold); }
+.misfire-popup .dialog-header h2 { color: var(--gold); }
+.misfire-popup .misfire-details { margin-top: 12px; }
+.misfire-popup > .roll-button { margin-top: 18px; width: 100%; justify-content: center; }
+.history-misfire { margin-top: 9px; }
+.history-misfire summary { cursor: pointer; color: var(--muted); }
+.weapon-jam { display: grid; gap: 8px; margin-top: 10px; padding: 10px; border: 1px solid var(--gold); border-radius: 6px; }
+.weapon-jam strong { font-size: .9375rem; }
+.weapon-jam span { color: var(--muted); font-size: .875rem; }
+.weapon-jam button { justify-self: start; max-width: 100%; }
 [hidden] { display: none !important; }
 body { margin: 0; min-width: 320px; }
 button, input, select { font: inherit; }
