@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import EncounterPanel from './EncounterPanel';
 import { continueHold, defaultBrawlOptions, resolveBrawl } from './brawling';
 import { sample as completeSample } from './characters';
-import { addCombatant, adjustCombatant, advancePhase, applyBrawl, applyShotWounds, combatantsBySpeed, combatantSpeed, combatantStatus, encounterKey, newEncounter, readEncounter, releaseHold, remainingStrength, removeCombatant, trackedShootingModifiers, undoEncounter, updateActingSheet, withDefaultTarget, writeEncounter, type ActionContext, type Encounter } from './encounter';
+import { addCombatant, adjustCombatant, advancePhase, applyBrawl, applyShotWounds, combatantsByFirstShot, combatantsBySpeed, combatantFirstShot, combatantSpeed, combatantStatus, encounterKey, newEncounter, readEncounter, releaseHold, remainingStrength, removeCombatant, trackedShootingModifiers, undoEncounter, updateActingSheet, withDefaultTarget, writeEncounter, type ActionContext, type Encounter } from './encounter';
+import { abilityModifiers, calculate } from './rules';
 import { resolveWound, type HitEffects } from './wounds';
 
 // These encounter fixtures exercise legacy recorded Strength ratings.
@@ -20,6 +24,63 @@ function hit(location: number, severity: number): HitEffects {
   const wound = resolveWound(location, severity);
   return { spreadRoll: null, spreadDie: null, wounds: [wound], totalStrengthLoss: wound.strengthLoss ?? 0, mortal: wound.severity === 'Mortal' };
 }
+
+test('first-shot order uses each character’s Speed, Bravery and selected weapon, and updates with weapon edits', () => {
+  let state = fight();
+  state = updateActingSheet(state, { ...state.members[0].sheet, abilities: { ...sample.abilities, speed: '38' }, loadout: { weaponId: 'fast-draw', customSpeed: '-10' } });
+  state = { ...state, actorId: 'sam' };
+  state = updateActingSheet(state, { ...state.members[1].sheet, abilities: { ...sample.abilities, speed: '80' }, loadout: { weaponId: 'rifle', customSpeed: '10' } });
+  const [juan, sam] = state.members;
+  assert.equal(combatantFirstShot(juan).label, 'First shot +15');
+  assert.equal(combatantFirstShot(sam).score, 5);
+  assert.equal(combatantFirstShot(juan).score, calculate(abilityModifiers(juan.sheet.abilities, 10)).firstShot);
+  assert.deepEqual(combatantsByFirstShot(state.members).map(member => member.id), ['juan', 'sam']);
+  assert.deepEqual(combatantsBySpeed(state.members).map(member => member.id), ['sam', 'juan']);
+  const changed = updateActingSheet(state, { ...sam.sheet, loadout: { weaponId: 'single-action', customSpeed: '-10' } });
+  assert.equal(combatantFirstShot(changed.members[1]).score, 18);
+  assert.deepEqual(combatantsByFirstShot(changed.members).map(member => member.id), ['sam', 'juan']);
+  assert.equal(combatantFirstShot(readEncounter({ getItem: () => JSON.stringify(changed) }, 'fallback').members[1]).score, 18);
+});
+
+test('first-shot order includes wound penalties and actor-specific situations without applying accuracy or brawling modifiers', () => {
+  const state = fight();
+  const [juan, sam] = state.members;
+  const wounded = { ...juan, wounds: hit(1, 1).wounds, loss: 3, modifier: 10 };
+  assert.equal(combatantFirstShot(wounded).score, 13); // 12 Speed + 1 Bravery + 5 weapon - 5 wounds.
+  assert.equal(combatantFirstShot({ ...wounded, wounds: [...wounded.wounds, ...hit(1, 51).wounds] }).score, -2);
+  assert.equal(combatantFirstShot(wounded, 10).score, 23);
+  assert.deepEqual(combatantsByFirstShot([wounded, sam]).map(member => member.id), ['sam', 'juan']);
+  assert.deepEqual(combatantsByFirstShot([wounded, sam], { juan: 10 }).map(member => member.id), ['juan', 'sam']);
+  assert.equal(combatantFirstShot({ ...sam, sheet: { ...sam.sheet, abilities: { ...sam.sheet.abilities, gunAccuracy: '', throwingAccuracy: '', gunfights: '' } } }).score, 18);
+});
+
+test('first-shot scores support custom weapons, legacy modifiers, 00, negative totals, stable ties and incomplete sheets', () => {
+  const base = fight().members[0];
+  const legacy = { ...base, sheet: { ...base.sheet, mode: 'modifiers' as const, modifiers: { ...base.sheet.modifiers, speed: '-5', braverySpeed: '-4', weaponSpeed: '10' }, loadout: { weaponId: 'custom-throw', customSpeed: '-10' } } };
+  assert.equal(combatantFirstShot(legacy).score, -19);
+  assert.equal(combatantFirstShot({ ...base, sheet: { ...base.sheet, abilities: { ...base.sheet.abilities, speed: '00' } } }).score, 28);
+  const firstTie = { ...base, id: 'first-tie', sheet: { ...base.sheet, abilities: { ...base.sheet.abilities, speed: '83' } } };
+  const secondTie = { ...base, id: 'second-tie' };
+  const missingBravery = { ...base, id: 'missing', sheet: { ...base.sheet, abilities: { ...base.sheet.abilities, bravery: '' } } };
+  assert.deepEqual(combatantsByFirstShot([missingBravery, firstTie, legacy, secondTie]).map(member => member.id), ['first-tie', 'second-tie', 'juan', 'missing']);
+  assert.equal(combatantFirstShot(missingBravery).score, null);
+  for (const customSpeed of ['', '3', 'oops']) assert.equal(combatantFirstShot({ ...legacy, sheet: { ...legacy.sheet, loadout: { weaponId: 'custom-gun', customSpeed } } }).score, null);
+  assert.equal(combatantFirstShot(base, NaN).score, null);
+  assert.deepEqual(combatantsByFirstShot([]), []);
+});
+
+test('acting character dropdown displays and sorts first-shot totals in shooting, and Speed in brawling', () => {
+  const state = fight();
+  const props = { encounter: state, current: state.members[0].sheet, saved: [], activeId: null, error: '', storageError: '', firstShotAdjustment: -10, onChange() {}, onError() {}, onAdvance() {}, onReset() {}, onActor() {}, onTarget() {} };
+  const html = renderToStaticMarkup(React.createElement(EncounterPanel, props));
+  const options = html.match(/<select[\s\S]*?<\/select>/)?.[0] ?? '';
+  assert.ok(options.indexOf('Sam') < options.indexOf('Juan'));
+  assert.match(options, /Sam · First shot \+18 · Standing/);
+  assert.match(options, /Juan · First shot \+8 · Standing/);
+  const brawlHtml = renderToStaticMarkup(React.createElement(EncounterPanel, { ...props, encounter: { ...state, phase: 'brawl-1' } }));
+  assert.match(brawlHtml, /Juan · Speed 90 \(\+12\) · Standing/);
+  assert.ok(!brawlHtml.includes('First shot'));
+});
 
 test('Speed ordering compares sheet scores and modifiers on a common scale', () => {
   const base = fight().members[0];

@@ -1,7 +1,7 @@
 import { normalizeCharacter, parseCharacter, type Character } from './characters';
 import { type BrawlResult, type HoldKind } from './brawling';
 import { resolveWound, type HitEffects, type Wound } from './wounds';
-import { percentileValue, signed, speedAbilityModifier } from './rules';
+import { percentileResult, percentileValue, signed, speedAbilityModifier, weaponProfiles, weapons } from './rules';
 
 export type Phase = 'shooting' | 'brawl-1' | 'brawl-2';
 export const phaseNames: Record<Phase, string> = { shooting: 'Shooting', 'brawl-1': 'Brawling · round 1', 'brawl-2': 'Brawling · round 2' };
@@ -63,6 +63,30 @@ export function combatantsBySpeed(members: readonly Combatant[]): Combatant[] {
     if (first.speed.modifier === null) return second.speed.modifier === null ? 0 : 1;
     if (second.speed.modifier === null) return -1;
     return second.speed.modifier - first.speed.modifier || (second.speed.score ?? -1) - (first.speed.score ?? -1);
+  }).map(item => item.member);
+}
+export function combatantFirstShot(member: Combatant, adjustment = 0): { score: number | null; label: string } {
+  try {
+    const speed = combatantSpeed(member).modifier;
+    if (speed === null) throw new Error('Missing Speed');
+    const sheet = member.sheet;
+    const bravery = sheet.mode === 'scores' ? percentileResult('bravery', sheet.abilities.bravery).value : Number(sheet.modifiers.braverySpeed);
+    if (sheet.mode === 'modifiers' && (!sheet.modifiers.braverySpeed.trim() || !Number.isInteger(bravery) || Math.abs(bravery) > 100)) throw new Error('Invalid Bravery');
+    const weapon = weaponProfiles.find(item => item.id === sheet.loadout.weaponId);
+    if (!weapon) throw new Error('Unknown weapon');
+    const weaponSpeed = weapon.ranges ? weapon.speed : Number(sheet.loadout.customSpeed);
+    if (!weapon.ranges && (!sheet.loadout.customSpeed.trim() || !weapons.some(item => item.value === weaponSpeed))) throw new Error('Invalid weapon speed');
+    if (!Number.isInteger(adjustment)) throw new Error('Invalid adjustment');
+    const score = speed + bravery + weaponSpeed + trackedShootingModifiers(member, 'right').wound + adjustment;
+    return { score, label: `First shot ${signed(score)}` };
+  } catch { return { score: null, label: 'First shot —' }; }
+}
+export function combatantsByFirstShot(members: readonly Combatant[], adjustments: Readonly<Record<string, number>> = {}): Combatant[] {
+  return members.map(member => ({ member, score: combatantFirstShot(member, adjustments[member.id] ?? 0).score })).sort((first, second) => {
+    if (first.score === null) return second.score === null ? 0 : 1;
+    if (second.score === null) return -1;
+    // Equal totals act simultaneously; retain roster order for those ties.
+    return second.score - first.score;
   }).map(item => item.member);
 }
 export function trackedShootingModifiers(member: Combatant, gunHand: 'left' | 'right') {

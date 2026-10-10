@@ -48,7 +48,7 @@ export default function BrawlPanel({ mode, encounter, latest, onRoll, onContinue
   const alreadyApplied = latest && encounter.applied.includes(latest.id);
   const currentResult = latest?.context && latest.context.encounterId === encounter.id && latest.context.turn === encounter.turn && latest.context.phase === encounter.phase;
   return <section className="brawl-card card" aria-labelledby="brawl-title">
-    <div className="section-heading"><div className="title-with-icon">{mode === 'punching' ? <Hand size={19}/> : <Link size={19}/>}<h2 id="brawl-title">{mode === 'punching' ? 'Throw a punch' : held ? 'Break the hold' : 'Get a grip'}</h2></div><span className="small-label">2d10</span></div>
+    <div className="section-heading"><div className="title-with-icon">{mode === 'punching' ? <Hand size={19}/> : <Link size={19}/>}<h2 id="brawl-title">{mode === 'punching' ? 'Punching' : held ? 'Escape a hold' : 'Grappling'}</h2></div><span className="small-label">2d10</span></div>
     <p className="panel-hint">Within six feet. Highest speed acts first unless completely surprised; resolve the other character’s reply afterward.</p>
     <div className="brawl-fields">
       {mode === 'punching' && <>

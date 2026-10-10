@@ -106,9 +106,8 @@ h1 { margin-top: 13px; font-size: clamp(28px, 3vw, 38px); font-weight: 400; lett
 .extra-preview { flex-basis: 100%; padding: 14px; border: 1px solid var(--line); border-radius: 8px; }
 .extra-preview > strong { font-size: 1rem; }
 .extra-preview dl { display: flex; flex-wrap: wrap; gap: 12px 24px; margin: 12px 0; }
-.extra-preview dt, .extra-preview p, .extra-reference { color: var(--muted); font-size: .875rem; line-height: 1.6; }
+.extra-preview dt, .extra-preview p { color: var(--muted); font-size: .875rem; line-height: 1.6; }
 .extra-preview dd { margin: 0; font-size: 1.125rem; font-weight: 600; }
-.extra-reference { margin-top: 8px; }
 .combatant-adjust > label { flex: 1 1 100px; }
 .combatant-adjust input[type='number'] { width: 100%; }
 .checkbox-label { display: inline-flex !important; align-items: center; flex-direction: row !important; gap: 8px !important; font-size: .875rem; color: var(--muted); }
@@ -315,7 +314,7 @@ footer button:hover { color: var(--green); }
 .dialog-header h2 { font-size: 1.625rem; }
 .icon-button { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 5px; background: #f3eee4; color: var(--muted); }
 .icon-button:hover { background: #e8e1d3; }
-.rules-content h3 { margin: 12px 0 18px; font-size: 1.75rem; font-weight: 400; }
+.rules-content > .eyebrow { margin-bottom: 18px; }
 .rules-content p, .new-character-form p { margin-bottom: 16px; font-size: 1rem; line-height: 1.8; color: var(--muted); }
 .rules-content b { color: var(--ink); font-weight: 600; }
 .rules-content .reference-note { padding: 12px; background: #f5f1e7; border-radius: 5px; font-size: .875rem; }

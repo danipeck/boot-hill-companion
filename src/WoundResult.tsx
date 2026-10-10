@@ -18,7 +18,7 @@ export function WoundDetails({ result }: { result: HitEffects }) {
 
 export default function WoundResult({ weapon, range, result, onRoll, action }: { weapon: string; range: string; result?: HitEffects; onRoll: () => void; action?: ReactNode }) {
   return <section className="wound-card card" aria-labelledby="wound-title">
-    <div className="section-heading"><div className="title-with-icon"><Crosshair size={18}/><h2 id="wound-title">Where it lands</h2></div><span className="small-label">03 / HIT RESULTS</span></div>
+    <div className="section-heading"><div className="title-with-icon"><Crosshair size={18}/><h2 id="wound-title">Hit results</h2></div><span className="small-label">03 / HIT RESULTS</span></div>
     <p className="wound-context">{weapon} · {range} range</p>
     {result ? <div aria-live="polite" aria-atomic="true" aria-label={hitEffectsSummary(result)}><WoundDetails result={result}/></div> : <div className="wound-prompt"><p>Roll the target’s wound location and severity after resolving cover.</p><button type="button" className="roll-button" onClick={onRoll}><Dice5 size={18}/>Roll wounds<ArrowRight size={16}/></button></div>}
     {action}
