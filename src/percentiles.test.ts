@@ -79,7 +79,7 @@ test('saved/imported rolls are the source of derived stats, even if cached ratin
 });
 
 test('old sheets retain their recorded ratings without inventing the missing rolls', () => {
-  const character = parseCharacter({ ...sample, strength: '17', abilities: { ...sample.abilities, gunfights: '15' } });
+  const character = parseCharacter({ ...sample, percentiles: undefined, strength: '17', abilities: { ...sample.abilities, gunfights: '15' } });
   assert.equal(character.percentiles, undefined); assert.equal(character.strength, '17'); assert.equal(character.abilities.gunfights, '15');
   assert.match(characterStatReadout(character, 'strength'), /Strength 17 · recorded rating/);
   assert.match(characterStatReadout(character, 'experience'), /15 previous gunfights · Accuracy \+10/);

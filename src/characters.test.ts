@@ -7,7 +7,36 @@ function storage(initial: Record<string, string> = {}) {
   return { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); } };
 }
 function initialLibrary() { return readLibrary(storage()); }
-function legacyCharacter() { const { loadout, ...character } = structuredClone(sample); return character; }
+function legacyCharacter() { const { loadout, strength, percentiles, ...character } = structuredClone(sample); return character; }
+
+test('Colorado Kid has complete creation rolls and unchanged stored samples gain the missing stats', () => {
+  const oldSample = { ...legacyCharacter(), abilities: { ...sample.abilities, gunfights: '0' }, modifiers: { ...sample.modifiers, experience: '-10' }, loadout: { weaponId: 'knife', customSpeed: '5' } };
+  const library = initialLibrary();
+  assert.equal(library.draft.strength, '15');
+  assert.equal(library.draft.abilities.gunfights, '2');
+  assert.equal(library.draft.modifiers.experience, '-5');
+  assert.deepEqual(library.draft.percentiles, { strength: '68', experience: '68' });
+  for (const local of [
+    storage({ [legacyKey]: JSON.stringify(oldSample) }),
+    storage({ [libraryKey]: JSON.stringify({ ...library, draft: oldSample, characters: [{ id: library.activeId, character: oldSample }] }) }),
+  ]) {
+    const upgraded = readLibrary(local);
+    assert.equal(upgraded.draft.strength, '15');
+    assert.equal(upgraded.draft.abilities.gunfights, '2');
+    assert.deepEqual(upgraded.draft.percentiles, sample.percentiles);
+    assert.equal(upgraded.draft.loadout.weaponId, 'knife');
+    assert.deepEqual(upgraded.characters[0].character, upgraded.draft);
+    writeLibrary(local, upgraded);
+    assert.deepEqual(readLibrary(local), upgraded);
+  }
+  for (const edited of [
+    { ...oldSample, name: 'Rose' },
+    { ...oldSample, strength: '17' },
+    { ...oldSample, abilities: { ...oldSample.abilities, speed: '96' } },
+    { ...oldSample, abilities: { ...oldSample.abilities, gunfights: '4' } },
+    { ...oldSample, percentiles: { strength: '', experience: '' } },
+  ]) assert.deepEqual(parseCharacter(edited, false).percentiles, 'percentiles' in edited ? edited.percentiles : undefined);
+});
 
 test('migrates the previously saved character without deleting its original data', () => {
   const legacy = { ...legacyCharacter(), name: 'Ada', abilities: { ...sample.abilities, speed: '96' } };
@@ -60,7 +89,7 @@ test('persists an unfinished draft separately from its saved snapshot', () => {
 
 test('export and import round-trip both input modes, including custom weapons', () => {
   for (const mode of ['scores', 'modifiers'] as const) {
-    const character = { ...structuredClone(sample), mode, name: 'Rose', loadout: { weaponId: 'custom-throw', customSpeed: '10' } };
+    const character = parseCharacter({ ...structuredClone(sample), mode, name: 'Rose', loadout: { weaponId: 'custom-throw', customSpeed: '10' } });
     character.modifiers.name = 'Rose';
     const json = exportCharacterJson(character);
     const imported = importCharacter(initialLibrary(), json, `import-${mode}`);
@@ -80,20 +109,20 @@ test('imports old exports, BOM-prefixed JSON, and numeric stat fields', () => {
 
 test('optional Strength ratings round-trip without breaking older character exports', () => {
   assert.equal(parseCharacter(legacyCharacter()).strength, undefined);
-  const character = { ...sample, strength: '15' };
-  assert.equal(importCharacter(initialLibrary(), exportCharacterJson(character), 'strong').draft.strength, '15');
-  assert.equal(parseCharacter({ ...sample, strength: 13 }).strength, '13');
-  assert.equal(parseCharacter({ ...sample, strength: '' }).strength, '');
-  for (const strength of ['0', '100', '1.5', 'bad']) assert.throws(() => parseCharacter({ ...sample, strength }), /Strength/);
+  const character = { ...legacyCharacter(), strength: '15' };
+  assert.equal(importCharacter(initialLibrary(), exportCharacterJson(parseCharacter(character)), 'strong').draft.strength, '15');
+  assert.equal(parseCharacter({ ...legacyCharacter(), strength: 13 }).strength, '13');
+  assert.equal(parseCharacter({ ...legacyCharacter(), strength: '' }).strength, '');
+  for (const strength of ['0', '100', '1.5', 'bad']) assert.throws(() => parseCharacter({ ...legacyCharacter(), strength }), /Strength/);
 });
 
 test('optional Morale percentages round-trip and reject invalid imported values', () => {
   assert.equal(parseCharacter(sample).morale, undefined);
-  const character = { ...sample, morale: '91' };
-  assert.equal(importCharacter(initialLibrary(), exportCharacterJson(character), 'morale').draft.morale, '91');
-  assert.equal(parseCharacter({ ...sample, morale: 0 }).morale, '0');
-  assert.equal(parseCharacter({ ...sample, morale: '' }).morale, '');
-  for (const morale of ['-1', '101', '1.5', 'bad']) assert.throws(() => parseCharacter({ ...sample, morale }), /Morale/);
+  const character = { ...legacyCharacter(), morale: '91' };
+  assert.equal(importCharacter(initialLibrary(), exportCharacterJson(parseCharacter(character)), 'morale').draft.morale, '91');
+  assert.equal(parseCharacter({ ...legacyCharacter(), morale: 0 }).morale, '0');
+  assert.equal(parseCharacter({ ...legacyCharacter(), morale: '' }).morale, '');
+  for (const morale of ['-1', '101', '1.5', 'bad']) assert.throws(() => parseCharacter({ ...legacyCharacter(), morale }), /Morale/);
 });
 
 test('same-name imports add separate entries instead of overwriting characters', () => {
@@ -115,7 +144,7 @@ test('rejects invalid imports without changing the open sheet or library', () =>
     JSON.stringify({ ...sample, mode: ['scores'] }),
     JSON.stringify({ ...sample, abilities: { ...sample.abilities, speed: '101' } }),
     JSON.stringify({ ...sample, abilities: { ...sample.abilities, speed: '1.5' } }),
-    JSON.stringify({ ...sample, mode: 'modifiers', modifiers: { ...sample.modifiers, experience: 'bad' } }),
+    JSON.stringify({ ...legacyCharacter(), mode: 'modifiers', modifiers: { ...sample.modifiers, experience: 'bad' } }),
     JSON.stringify({ ...sample, loadout: { weaponId: 'missing', customSpeed: '5' } }),
     JSON.stringify({ ...sample, loadout: { weaponId: 'custom-gun', customSpeed: '' } }),
   ];

@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { continueHold, defaultBrawlOptions, resolveBrawl } from './brawling';
-import { sample } from './characters';
+import { sample as completeSample } from './characters';
 import { addCombatant, adjustCombatant, advancePhase, applyBrawl, applyShotWounds, combatantsBySpeed, combatantSpeed, combatantStatus, encounterKey, newEncounter, readEncounter, releaseHold, remainingStrength, removeCombatant, trackedShootingModifiers, undoEncounter, updateActingSheet, withDefaultTarget, writeEncounter, type ActionContext, type Encounter } from './encounter';
 import { resolveWound, type HitEffects } from './wounds';
+
+// These encounter fixtures exercise legacy recorded Strength ratings.
+const { strength: _strength, percentiles: _percentiles, ...sample } = structuredClone(completeSample);
 
 function fight() {
   let state = addCombatant(newEncounter('fight'), { ...sample, name: 'Juan', strength: '13' }, 'juan');
@@ -148,7 +151,7 @@ test('gun wounds accumulate once on the recorded target, with knockout distinct 
   state = applyShotWounds(state, context(before), 'shot-4', hit(86, 41));
   assert.equal(combatantStatus(state.members[1]), 'Dead');
   assert.equal(before.members[1].loss, 0);
-  assert.equal(sample.strength, undefined);
+  assert.equal('strength' in sample, false);
 });
 
 test('shotgun zero-wound and multiple-wound results retain their table effects', () => {
@@ -239,7 +242,7 @@ test('shootouts round-trip through local storage including statuses and holds', 
 
 test('Strength ratings are required for roster entry, while old sheets remain usable', () => {
   const empty = newEncounter('empty');
-  for (const strength of [undefined, '', '0', '100', '2.5', 'oops']) assert.throws(() => addCombatant(empty, { ...sample, strength }, 'new'), /Strength rating/);
+  for (const strength of [undefined, '', '0', '100', '2.5', 'oops']) assert.throws(() => addCombatant(empty, { ...sample, percentiles: undefined, strength }, 'new'), /Strength rating/);
   const state = fight();
   assert.throws(() => addCombatant(state, { ...sample, strength: '13' }, 'juan'), /already/);
   assert.throws(() => adjustCombatant(state, 'juan', 14, false), /0–13/);

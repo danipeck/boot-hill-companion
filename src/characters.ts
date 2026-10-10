@@ -15,12 +15,13 @@ export type SavedCharacter = { id: string; character: Character };
 export type CharacterLibrary = { version: 1; draft: Character; activeId: string | null; characters: SavedCharacter[] };
 export const libraryKey = 'boot-hill.characters.v1';
 export const legacyKey = 'boot-hill.character.v1';
-export const sample: Character = {
+export const sample: Character = normalizeCharacter({
   name: 'The Colorado Kid', mode: 'scores',
-  abilities: { speed: '90', gunAccuracy: '64', throwingAccuracy: '62', bravery: '55', gunfights: '0' },
+  abilities: { speed: '90', gunAccuracy: '64', throwingAccuracy: '62', bravery: '55', gunfights: '2' },
+  percentiles: { strength: '68', experience: '68' },
   modifiers: { ...initialSheet, speed: '12', braverySpeed: '1', gunAccuracy: '5', throwingAccuracy: '5', braveryAccuracy: '3' },
   loadout: { weaponId: 'double-action', customSpeed: '5' },
-};
+});
 
 export function blankCharacter(name: string): Character {
   return { name, mode: 'scores', abilities: { speed: '', gunAccuracy: '', throwingAccuracy: '', bravery: '', gunfights: '' }, percentiles: { strength: '', experience: '' }, modifiers: { ...initialSheet, name }, loadout: { ...sample.loadout } };
@@ -115,6 +116,13 @@ export function parseCharacter(value: unknown, validateStats = true): Character 
     if (validateStats && character.morale.trim() !== '' && (!Number.isInteger(Number(character.morale)) || Number(character.morale) < 0 || Number(character.morale) > 100)) {
       throw new Error('Morale must be a whole-number percentage from 0 to 100, or left blank.');
     }
+  }
+  // Fill the missing creation rolls only for the unchanged old sample.
+  // Other legacy sheets keep their recorded stats and unknown original rolls.
+  if (character.name === sample.name && character.mode === 'scores' && character.percentiles === undefined
+      && !character.strength?.trim() && character.abilities.gunfights === '0'
+      && (['speed', 'gunAccuracy', 'throwingAccuracy', 'bravery'] as const).every(key => character.abilities[key] === sample.abilities[key])) {
+    character = { ...character, percentiles: { ...sample.percentiles } };
   }
   character = normalizeCharacter(upgradeLegacyExtra(character));
   if (validateStats) {
