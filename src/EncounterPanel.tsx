@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { ArrowRight, Dice5, Plus, RotateCcw, Trash2, Users } from 'lucide-react';
 import { holdNames } from './brawling';
 import { normalizeCharacter, setPercentileRoll, type Character, type SavedCharacter } from './characters';
-import { addCombatant, adjustCombatant, canAct, jammedWeapon, startClearingJam, combatantsByFirstShot, combatantsBySpeed, combatantFirstShot, combatantSpeed, combatantStatus, phaseNames, remainingStrength, removeCombatant, undoEncounter, type Combatant, type Encounter } from './encounter';
+import { addCombatant, adjustCombatant, encounterTargets, canAct, jammedWeapon, startClearingJam, combatantsByFirstShot, combatantsBySpeed, combatantFirstShot, combatantSpeed, combatantStatus, phaseNames, remainingStrength, removeCombatant, undoEncounter, type Combatant, type Encounter } from './encounter';
 import { signed, weaponProfiles, weapons } from './rules';
 import { createExtra, extraPresets, generateExtra } from './extras';
+import { HorseAdder, HorseCard } from './HorsePanel';
 
 type Props = {
   encounter: Encounter; current: Character; saved: SavedCharacter[]; activeId: string | null;
@@ -31,6 +32,7 @@ export function ExtraPreview({ sheet }: { sheet: Character }) {
 
 export default function EncounterPanel({ encounter, current, saved, activeId, error, storageError, onChange, onError, onAdvance, onReset, onActor, onTarget, firstShotAdjustment = 0 }: Props) {
   const [adding, setAdding] = useState(false);
+  const [addingHorse, setAddingHorse] = useState(false);
   const [choice, setChoice] = useState('current');
   const [strengthRoll, setStrengthRoll] = useState<string | null>(null);
   const [extraName, setExtraName] = useState('');
@@ -75,13 +77,16 @@ export default function EncounterPanel({ encounter, current, saved, activeId, er
   const adjustments = { [encounter.actorId]: firstShotAdjustment };
   const actingOrder = shooting ? combatantsByFirstShot(encounter.members, adjustments) : combatantsBySpeed(encounter.members);
   const orderLabel = (member: Combatant) => shooting ? combatantFirstShot(member, adjustments[member.id] ?? 0).label : combatantSpeed(member).label;
-  const automaticTarget = encounter.members.find(member => member.id === encounter.targetId && member.id !== encounter.actorId);
+  const targets = encounterTargets(encounter);
+  const automaticTarget = targets.find(target => target.id === encounter.targetId);
+  const horses = encounter.horses ?? [];
+  const horseProps = { encounter, onChange, onError };
   return <section className="encounter-card card" aria-labelledby="encounter-title">
     <div className="section-heading"><div className="title-with-icon"><Users size={18}/><h2 id="encounter-title">The shootout</h2></div><span className="turn-label">TURN {encounter.turn}</span></div>
     <div className="phase-row"><ol className="phase-steps" aria-label="Turn phases">{(['shooting', 'brawl-1', 'brawl-2'] as const).map(phase => <li key={phase} aria-current={encounter.phase === phase ? 'step' : undefined} className={encounter.phase === phase ? 'current' : ''}>{phase === 'shooting' ? 'Shooting' : phase === 'brawl-1' ? 'Brawling 1' : 'Brawling 2'}</li>)}</ol><button className="export-button" onClick={onAdvance}>{nextPhase}<ArrowRight size={15}/></button></div>
     {!encounter.members.length && <p className="panel-hint">Add characters to track Strength, wounds, and holds. You can also use the dice below on their own.</p>}
     {encounter.members.length > 0 && <>
-      <div className="combatant-selectors"><label>Acting character<select value={encounter.actorId} onChange={event => onActor(event.target.value)}><option value="">Choose who acts</option>{actingOrder.map(member => <option value={member.id} key={member.id}>{member.sheet.name} · {orderLabel(member)} · {combatantStatus(member)}</option>)}</select></label><label>Target{encounter.members.length >= 3 ? <select value={encounter.targetId} onChange={event => onTarget(event.target.value)}><option value="">Untracked target</option>{encounter.members.filter(member => member.id !== encounter.actorId).map(member => <option value={member.id} key={member.id}>{member.sheet.name} · {combatantStatus(member)}</option>)}</select> : <span className="automatic-target" role="status">{automaticTarget ? `${automaticTarget.sheet.name} · ${combatantStatus(automaticTarget)}` : encounter.actorId ? 'No other combatant' : 'Choose an acting character'}</span>}</label></div>
+      <div className="combatant-selectors"><label>Acting character<select value={encounter.actorId} onChange={event => onActor(event.target.value)}><option value="">Choose who acts</option>{actingOrder.map(member => <option value={member.id} key={member.id}>{member.sheet.name} · {orderLabel(member)} · {combatantStatus(member)}</option>)}</select></label><label>Target{targets.length > 1 ? <select value={encounter.targetId} onChange={event => onTarget(event.target.value)}><option value="">Untracked target</option>{targets.map(target => <option value={target.id} key={target.id}>{target.name}{target.kind === 'horse' ? ' (horse)' : ''} · {target.status}</option>)}</select> : <span className="automatic-target" role="status">{automaticTarget ? `${automaticTarget.name}${automaticTarget.kind === 'horse' ? ' (horse)' : ''} · ${automaticTarget.status}` : encounter.actorId ? 'No other combatant' : 'Choose an acting character'}</span>}</label></div>
       <p className="panel-hint">{shooting ? 'Ordered by first-shot score: Speed and Bravery modifiers + weapon speed + wound penalties. Current situational modifiers apply to the selected actor. Highest acts first; equal scores act simultaneously.' : 'Acting characters are listed by Speed, highest first. Choose who acts when surprise changes the order.'}</p>
       <div className="combatant-list">{encounter.members.map(member => {
         const status = combatantStatus(member);
@@ -101,10 +106,13 @@ export default function EncounterPanel({ encounter, current, saved, activeId, er
           {member.hold && <p className="hold-label">{holdNames[member.hold.kind]} · held by {holder?.sheet.name}</p>}
           {member.wounds.length > 0 && <details className="tracked-wounds"><summary>Wound details</summary>{member.wounds.map((wound, index) => <p key={index}>{wound.severity} · {wound.location} · {wound.strengthLoss === null ? 'Fatal' : `−${wound.strengthLoss} Strength`}{wound.effects.length > 0 && <small>{wound.effects.join(' ')}</small>}</p>)}</details>}
           {editing === member.id && <form className="combatant-adjust" onSubmit={event => { event.preventDefault(); try { if (!remaining.trim()) throw new Error('Enter current Strength.'); onChange(adjustCombatant(encounter, member.id, Number(remaining), dead)); setEditing(''); onError(''); } catch (caught) { onError(caught instanceof Error ? caught.message : 'Check current Strength.'); } }}><label>Current Strength<input type="number" min={0} max={member.maxStrength} step="1" value={remaining} onChange={event => setRemaining(event.target.value)}/></label><label className="checkbox-label"><input type="checkbox" checked={dead} onChange={event => setDead(event.target.checked)}/>Dead</label><button className="export-button" type="submit">Apply</button><button className="text-button" type="button" onClick={() => setEditing('')}>Cancel</button></form>}
+          {horses.filter(horse => horse.riderId === member.id).map(horse => <HorseCard key={horse.id} horse={horse} {...horseProps}/>)}
         </div>;
       })}</div>
     </>}
-    <div className="encounter-tools"><button className="text-button" onClick={() => { if (!adding && choice === 'extra') ensureExtra(); setAdding(!adding); }} aria-expanded={adding}><Plus size={15}/>Add combatant</button><button className="text-button" disabled={!encounter.previous} onClick={() => { onChange(undoEncounter(encounter)); setEditing(''); }}><RotateCcw size={14}/>Undo tracker change</button><button className="text-button" onClick={() => setResetting(!resetting)}>New shootout</button></div>
+    {horses.some(horse => !horse.riderId) && <div className="unlinked-horses">{horses.filter(horse => !horse.riderId).map(horse => <HorseCard key={horse.id} horse={horse} {...horseProps}/>)}</div>}
+    <div className="encounter-tools"><button className="text-button" onClick={() => { if (!adding && choice === 'extra') ensureExtra(); setAdding(!adding); }} aria-expanded={adding}><Plus size={15}/>Add combatant</button><button className="text-button" onClick={() => setAddingHorse(!addingHorse)} aria-expanded={addingHorse}><Plus size={15}/>Add horse</button><button className="text-button" disabled={!encounter.previous} onClick={() => { onChange(undoEncounter(encounter)); setEditing(''); }}><RotateCcw size={14}/>Undo tracker change</button><button className="text-button" onClick={() => setResetting(!resetting)}>New shootout</button></div>
+    {addingHorse && <HorseAdder {...horseProps} onClose={() => setAddingHorse(false)}/>}
     {adding && <form className="add-combatant" onSubmit={event => { event.preventDefault(); add(); }}>
       <label>Character<select value={choice} onChange={event => { const value = event.target.value; setChoice(value); setStrengthRoll(null); if (value === 'extra') ensureExtra(); }}><option value="current">Current sheet · {current.name || 'Unnamed'}</option>{saved.map(entry => <option key={entry.id} value={entry.id}>{entry.character.name || 'Unnamed'}</option>)}<option value="extra">Quick NPC / extra</option></select></label>
       {choice === 'extra' && <>

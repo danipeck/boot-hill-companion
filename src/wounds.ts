@@ -5,6 +5,7 @@ export type Wound = {
   location: string;
   locationRoll: number;
   severityRoll: number;
+  severityModifier?: number;
   severity: WoundSeverity;
   strengthLoss: number | null;
   effects: string[];
@@ -16,7 +17,7 @@ export type HitEffects = {
   totalStrengthLoss: number;
   mortal: boolean;
 };
-export type HitContext = { hit: boolean; weaponId: string; rangeIndex: number };
+export type HitContext = { hit: boolean; weaponId: string; rangeIndex: number; targetKind?: 'horse' };
 
 // Boot Hill 2e, Wound Chart, p. 10 (also reference sheet p. 34).
 // Thresholds are inclusive. Arms and abdomen cannot suffer a mortal wound.
@@ -36,19 +37,21 @@ function assertPercentile(value: number) {
   if (!Number.isInteger(value) || value < 1 || value > 100) throw new Error('Wound rolls must be whole numbers from 1 to 100.');
 }
 
-export function resolveWound(locationRoll: number, severityRoll: number): Wound {
+export function resolveWound(locationRoll: number, severityRoll: number, targetKind?: 'horse'): Wound {
   assertPercentile(locationRoll);
   assertPercentile(severityRoll);
   const location = locations.find(item => locationRoll <= item.max)!;
-  const severity: WoundSeverity = severityRoll <= location.light ? 'Light' : severityRoll <= location.serious ? 'Serious' : 'Mortal';
+  const adjustedSeverity = severityRoll - (targetKind === 'horse' ? 20 : 0);
+  const severity: WoundSeverity = adjustedSeverity <= location.light ? 'Light' : adjustedSeverity <= location.serious ? 'Serious' : 'Mortal';
   const effects: string[] = [];
   if (severity === 'Mortal') effects.push('Immediately fatal.');
   else {
     if (location.kind === 'leg') effects.push(severity === 'Light' ? 'Walk at half speed.' : 'Walk at quarter speed.');
     else if (severity === 'Serious') effects.push('Move at half speed, except walking.');
-    if (location.kind === 'arm') effects.push(`If this is the gun arm: −${severity === 'Light' ? 25 : 50} to hit.`);
+    if (location.kind === 'arm' && targetKind !== 'horse') effects.push(`If this is the gun arm: −${severity === 'Light' ? 25 : 50} to hit.`);
   }
-  return { location: location.name, locationRoll, severityRoll, severity, strengthLoss: severity === 'Mortal' ? null : severity === 'Light' ? 3 : 7, effects };
+  const name = targetKind === 'horse' ? location.name.replace('leg', 'rear leg').replace('arm / hand', 'foreleg') : location.name;
+  return { location: name, locationRoll, severityRoll, ...(targetKind === 'horse' ? { severityModifier: -20 } : {}), severity, strengthLoss: severity === 'Mortal' ? null : severity === 'Light' ? 3 : 7, effects };
 }
 
 // Shotgun / Scatter Gun Effects Table, p. 10. Columns: short, medium,
@@ -84,7 +87,7 @@ export function rollHitEffects(context: HitContext, draw: () => number = rollPer
     spreadDie = spread.die;
     count = spread.count;
   }
-  const wounds = Array.from({ length: count }, () => resolveWound(draw(), draw()));
+  const wounds = Array.from({ length: count }, () => resolveWound(draw(), draw(), context.targetKind));
   return {
     spreadRoll, spreadDie, wounds,
     totalStrengthLoss: wounds.reduce((sum, wound) => sum + (wound.strengthLoss ?? 0), 0),

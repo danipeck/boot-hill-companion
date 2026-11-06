@@ -9,17 +9,18 @@ export function WoundDetails({ result }: { result: HitEffects }) {
       {result.wounds.map((wound, index) => <div className={`wound-result severity-${wound.severity.toLowerCase()}`} key={index}>
         <div className="wound-result-heading"><strong>{result.wounds.length > 1 && <span className="wound-number">{index + 1}.</span>}{wound.location}</strong><span className="wound-severity">{wound.severity} wound</span></div>
         <div className="wound-impact"><b>{wound.strengthLoss === null ? 'Fatal' : `−${wound.strengthLoss} Strength`}</b>{wound.effects.map(effect => <span key={effect}>{effect}</span>)}</div>
-        <div className="wound-dice"><span>Location d100 <b>{wound.locationRoll}</b></span><span>Severity d100 <b>{wound.severityRoll}</b></span></div>
+        <div className="wound-dice"><span>Location d100 <b>{wound.locationRoll}</b></span><span>Severity d100 <b>{wound.severityRoll}</b>{wound.severityModifier !== undefined && <> − 20 = <b>{wound.severityRoll + wound.severityModifier}</b> (horse)</>}</span></div>
       </div>)}
     </div>}
     {result.wounds.length > 1 && <p className={`wound-total ${result.mortal ? 'is-mortal' : ''}`}>{result.mortal ? 'Mortal wound: immediately fatal.' : `Total: −${result.totalStrengthLoss} Strength`}</p>}
   </div>;
 }
 
-export default function WoundResult({ weapon, range, result, onRoll, action }: { weapon: string; range: string; result?: HitEffects; onRoll: () => void; action?: ReactNode }) {
+export default function WoundResult({ weapon, range, result, onRoll, action, target, targetDetails }: { weapon: string; range: string; result?: HitEffects; onRoll: () => void; action?: ReactNode; target?: string; targetDetails?: ReactNode }) {
   return <section className="wound-card card" aria-labelledby="wound-title">
     <div className="section-heading"><div className="title-with-icon"><Crosshair size={18}/><h2 id="wound-title">Hit results</h2></div><span className="small-label">03 / HIT RESULTS</span></div>
-    <p className="wound-context">{weapon} · {range} range</p>
+    <p className="wound-context">{weapon} · {range} range{target && ` · ${target}`}</p>
+    {targetDetails}
     {result ? <div aria-live="polite" aria-atomic="true" aria-label={hitEffectsSummary(result)}><WoundDetails result={result}/></div> : <div className="wound-prompt"><p>Roll the target’s wound location and severity after resolving cover.</p><button type="button" className="roll-button" onClick={onRoll}><Dice5 size={18}/>Roll wounds<ArrowRight size={16}/></button></div>}
     {action}
   </section>;
